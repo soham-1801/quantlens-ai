@@ -1,6 +1,7 @@
 import yfinance as yf
 import requests
 import re
+import traceback
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
@@ -24,6 +25,12 @@ def safe_int(val) -> Optional[int]:
         return int(val)
     except (ValueError, TypeError):
         return None
+
+def coalesce(*values):
+    for v in values:
+        if v is not None:
+            return v
+    return None
 
 class MarketDataService:
     _overview_cache = {}  # ticker_upper: (timestamp, StockOverview)
@@ -147,63 +154,129 @@ class MarketDataService:
     def get_stock_overview(ticker: str) -> Optional[StockOverview]:
         ticker_upper = ticker.upper().strip()
         now = datetime.now()
-        
-        # Check cache (60 seconds TTL)
+
+        # 5-minute cache (overview data is relatively stable)
         if ticker_upper in MarketDataService._overview_cache:
             cache_time, cached_data = MarketDataService._overview_cache[ticker_upper]
-            if (now - cache_time).total_seconds() < 60:
+            if (now - cache_time).total_seconds() < 300:
                 return cached_data
-                
+
         try:
             ticker_obj = yf.Ticker(ticker_upper)
-            info = ticker_obj.info
-            print(f"DEBUG {ticker_upper}: {info}")
- 
-            if not info or len(info) == 0:
+
+            # ── Source 1: fast_info (uses /v8/finance/chart/ — rarely rate-limited) ──
+            fi = {}
+            try:
+                raw = ticker_obj.fast_info
+                fi = {
+                    "currentPrice": safe_float(coalesce(getattr(raw, "currentPrice", None), getattr(raw, "regularMarketPrice", None))),
+                    "previousClose": safe_float(getattr(raw, "previousClose", None)),
+                    "dayHigh": safe_float(getattr(raw, "regularMarketDayHigh", None)),
+                    "dayLow": safe_float(getattr(raw, "regularMarketDayLow", None)),
+                    "open": safe_float(getattr(raw, "regularMarketOpen", None)),
+                    "volume": safe_int(getattr(raw, "regularMarketVolume", None)),
+                    "fiftyTwoWeekHigh": safe_float(getattr(raw, "fiftyTwoWeekHigh", None)),
+                    "fiftyTwoWeekLow": safe_float(getattr(raw, "fiftyTwoWeekLow", None)),
+                    "trailingPE": safe_float(getattr(raw, "trailingPE", None)),
+                    "forwardPE": safe_float(getattr(raw, "forwardPE", None)),
+                    "dividendYield": safe_float(getattr(raw, "dividendYield", None)),
+                    "trailingEps": safe_float(getattr(raw, "trailingEps", None)),
+                    "beta": safe_float(getattr(raw, "beta", None)),
+                    "marketCap": safe_int(getattr(raw, "marketCap", None)),
+                    "avgVolume": safe_int(coalesce(getattr(raw, "averageVolume", None), getattr(raw, "averageDailyVolume10Day", None))),
+                }
+            except Exception:
+                fi = {}
+
+            # ── Source 2: history(period="5d") for OHLCV (very reliable endpoint) ──
+            hist = {}
+            try:
+                df = ticker_obj.history(period="5d")
+                if not df.empty:
+                    last = df.iloc[-1]
+                    hist = {
+                        "currentPrice": safe_float(last.get("Close")),
+                        "dayHigh": safe_float(last.get("High")),
+                        "dayLow": safe_float(last.get("Low")),
+                        "open": safe_float(last.get("Open")),
+                        "volume": safe_int(last.get("Volume")),
+                    }
+                    if len(df) >= 2:
+                        hist["previousClose"] = safe_float(df.iloc[-2].get("Close"))
+            except Exception:
+                hist = {}
+
+            # ── Source 3: info dict (rate-limited — used only for company metadata) ──
+            info = {}
+            try:
+                raw_info = ticker_obj.info
+                if isinstance(raw_info, dict):
+                    info = raw_info
+            except Exception:
+                info = {}
+
+            def first(*values):
+                for v in values:
+                    if v is not None:
+                        return v
                 return None
-             
-            current_price = (
-                info.get("currentPrice") or 
-                info.get("regularMarketPrice") or 
-                info.get("regularMarketPreviousClose") or 
-                info.get("previousClose")
+
+            symbol = info.get("symbol") or ticker_upper
+            name = first(info.get("longName"), info.get("shortName"), ticker_upper)
+            if not symbol:
+                return None
+
+            current_price = first(
+                fi.get("currentPrice"),
+                safe_float(hist.get("currentPrice")),
+                safe_float(info.get("currentPrice")),
+                safe_float(info.get("regularMarketPrice")),
+                safe_float(info.get("regularMarketPreviousClose")),
+                safe_float(info.get("previousClose"))
             )
-            
-            raw_yield = info.get("dividendYield")
+
+            raw_dy = first(fi.get("dividendYield"), info.get("dividendYield"))
             dividend_yield = None
-            if raw_yield is not None:
-                val = safe_float(raw_yield)
+            if raw_dy is not None:
+                val = safe_float(raw_dy)
                 if val is not None:
                     dividend_yield = val / 100.0
-            
+
             result = StockOverview(
-                ticker=info.get("symbol", ticker_upper).upper(),
-                name=info.get("longName") or info.get("shortName") or ticker_upper,
+                ticker=symbol.upper(),
+                name=name or symbol,
                 description=info.get("longBusinessSummary"),
                 sector=info.get("sector"),
                 industry=info.get("industry"),
-                exchange=info.get("exchange") or info.get("fullExchangeName"),
+                exchange=first(info.get("exchange"), info.get("fullExchangeName")),
                 website=info.get("website"),
-                market_cap=safe_int(info.get("marketCap")),
-                pe_ratio=safe_float(info.get("trailingPE") or info.get("forwardPE")),
+                market_cap=first(fi.get("marketCap"), safe_int(info.get("marketCap"))),
+                pe_ratio=first(fi.get("trailingPE"), safe_float(info.get("trailingPE")), fi.get("forwardPE"), safe_float(info.get("forwardPE"))),
                 dividend_yield=dividend_yield,
-                current_price=safe_float(current_price),
-                day_high=safe_float(info.get("dayHigh") or info.get("regularMarketDayHigh")),
-                day_low=safe_float(info.get("dayLow") or info.get("regularMarketDayLow")),
-                fifty_two_week_high=safe_float(info.get("fiftyTwoWeekHigh")),
-                fifty_two_week_low=safe_float(info.get("fiftyTwoWeekLow")),
-                volume=safe_int(info.get("volume") or info.get("regularMarketVolume")),
-                previous_close=safe_float(info.get("previousClose") or info.get("regularMarketPreviousClose")),
-                open_price=safe_float(info.get("open") or info.get("regularMarketOpen")),
-                eps=safe_float(info.get("trailingEps") or info.get("forwardEps")),
-                beta=safe_float(info.get("beta")),
-                avg_volume=safe_int(info.get("averageVolume") or info.get("averageDailyVolume10Day") or info.get("averageVolume10days"))
+                current_price=current_price,
+                day_high=first(fi.get("dayHigh"), safe_float(hist.get("dayHigh")), safe_float(info.get("dayHigh")), safe_float(info.get("regularMarketDayHigh"))),
+                day_low=first(fi.get("dayLow"), safe_float(hist.get("dayLow")), safe_float(info.get("dayLow")), safe_float(info.get("regularMarketDayLow"))),
+                fifty_two_week_high=first(fi.get("fiftyTwoWeekHigh"), safe_float(info.get("fiftyTwoWeekHigh"))),
+                fifty_two_week_low=first(fi.get("fiftyTwoWeekLow"), safe_float(info.get("fiftyTwoWeekLow"))),
+                volume=first(fi.get("volume"), safe_int(hist.get("volume")), safe_int(info.get("volume")), safe_int(info.get("regularMarketVolume"))),
+                previous_close=first(fi.get("previousClose"), safe_float(hist.get("previousClose")), safe_float(info.get("previousClose")), safe_float(info.get("regularMarketPreviousClose"))),
+                open_price=first(fi.get("open"), safe_float(hist.get("open")), safe_float(info.get("open")), safe_float(info.get("regularMarketOpen"))),
+                eps=first(fi.get("trailingEps"), safe_float(info.get("trailingEps")), safe_float(info.get("forwardEps"))),
+                beta=first(fi.get("beta"), safe_float(info.get("beta"))),
+                avg_volume=first(
+                    fi.get("avgVolume"),
+                    safe_int(info.get("averageVolume")),
+                    safe_int(info.get("averageDailyVolume10Day")),
+                    safe_int(info.get("averageVolume10days"))
+                ),
             )
-            
-            # Save to cache
-            MarketDataService._overview_cache[ticker_upper] = (now, result)
+
+            if info.get("longName") or info.get("shortName"):
+                MarketDataService._overview_cache[ticker_upper] = (now, result)
             return result
+
         except Exception as e:
+            traceback.print_exc()
             print(f"Error fetching stock overview for {ticker_upper}: {e}")
             return None
 

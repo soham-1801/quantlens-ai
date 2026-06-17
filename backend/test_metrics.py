@@ -44,6 +44,7 @@ class TestFinancialMetrics(unittest.TestCase):
     def test_get_stock_overview_normalization(self, mock_ticker):
         # Setup mock Ticker info
         mock_instance = MagicMock()
+        mock_instance.fast_info = None
         mock_instance.info = {
             "symbol": "NVDA",
             "longName": "NVIDIA Corporation",
@@ -89,6 +90,7 @@ class TestFinancialMetrics(unittest.TestCase):
     def test_get_stock_overview_missing_values(self, mock_ticker):
         # Setup mock Ticker with missing/malformed values
         mock_instance = MagicMock()
+        mock_instance.fast_info = None
         mock_instance.info = {
             "symbol": "MOCK",
             "longName": "Mock Company",
