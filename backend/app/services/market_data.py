@@ -499,7 +499,6 @@ class MarketDataService:
 
             points = []
             for i in range(len(timestamps)):
-                from datetime import datetime
                 dt = datetime.fromtimestamp(timestamps[i])
                 points.append(StockHistoryPoint(
                     date=dt.strftime("%Y-%m-%d"),
