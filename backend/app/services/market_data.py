@@ -157,10 +157,10 @@ class MarketDataService:
         try:
             ticker_obj = yf.Ticker(ticker_upper)
             info = ticker_obj.info
-            
-            if not info or len(info) == 0 or not info.get("symbol"):
+ 
+            if not info or len(info) == 0:
                 return None
-            
+             
             current_price = (
                 info.get("currentPrice") or 
                 info.get("regularMarketPrice") or 
