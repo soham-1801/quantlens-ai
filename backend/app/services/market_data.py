@@ -466,52 +466,166 @@ class MarketDataService:
         return None
 
     @staticmethod
-    def get_stock_history(ticker: str, period: str) -> List[StockHistoryPoint]:
-        ticker_upper = ticker.upper().strip()
-        cache_key = (ticker_upper, period)
-        now = datetime.now()
-        
-        # Check cache (5 minutes TTL)
-        if cache_key in MarketDataService._history_cache:
-            cache_time, cached_data = MarketDataService._history_cache[cache_key]
-            if (now - cache_time).total_seconds() < 300:
-                return cached_data
-                
+    def _build_history_from_finnhub(ticker: str, period: str) -> Optional[List[StockHistoryPoint]]:
+        api_key = settings.FINNHUB_API_KEY
+        if not api_key:
+            return None
+
+        now_ts = int(datetime.now().timestamp())
+        period_days = {"1m": 31, "6m": 183, "1y": 365, "5y": 1825}
+        resolution = "D" if period != "5y" else "W"
+        from_ts = now_ts - period_days.get(period, 31) * 86400
+
+        try:
+            resp = requests.get(
+                f"https://finnhub.io/api/v1/stock/candle"
+                f"?symbol={ticker}&resolution={resolution}"
+                f"&from={from_ts}&to={now_ts}&token={api_key}",
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return None
+
+            data = resp.json()
+            if data.get("s") != "ok":
+                return None
+
+            closes = data.get("c", [])
+            highs = data.get("h", [])
+            lows = data.get("l", [])
+            opens = data.get("o", [])
+            volumes = data.get("v", [])
+            timestamps = data.get("t", [])
+
+            points = []
+            for i in range(len(timestamps)):
+                from datetime import datetime
+                dt = datetime.fromtimestamp(timestamps[i])
+                points.append(StockHistoryPoint(
+                    date=dt.strftime("%Y-%m-%d"),
+                    open=safe_float(opens[i]) if i < len(opens) else 0.0,
+                    high=safe_float(highs[i]) if i < len(highs) else 0.0,
+                    low=safe_float(lows[i]) if i < len(lows) else 0.0,
+                    close=safe_float(closes[i]) if i < len(closes) else 0.0,
+                    volume=safe_int(volumes[i]) if i < len(volumes) else 0,
+                ))
+
+            return points if points else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_history_from_yahoo_direct(ticker: str, period: str) -> Optional[List[StockHistoryPoint]]:
         period_map = {
             "1m": ("1mo", "1d"),
             "6m": ("6mo", "1d"),
             "1y": ("1y", "1d"),
-            "5y": ("5y", "1wk")
+            "5y": ("5y", "1wk"),
         }
-        
         yf_period, yf_interval = period_map.get(period, ("1mo", "1d"))
-        
+
         try:
-            ticker_obj = yf.Ticker(ticker_upper)
-            df = ticker_obj.history(period=yf_period, interval=yf_interval)
-            
-            if df.empty:
-                return []
-                
-            history_points = []
-            for date_index, row in df.iterrows():
-                date_str = date_index.strftime('%Y-%m-%d')
-                
-                history_points.append(StockHistoryPoint(
-                    date=date_str,
-                    open=safe_float(row.get('Open')) or 0.0,
-                    high=safe_float(row.get('High')) or 0.0,
-                    low=safe_float(row.get('Low')) or 0.0,
-                    close=safe_float(row.get('Close')) or 0.0,
-                    volume=safe_int(row.get('Volume')) or 0
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={yf_period}&interval={yf_interval}"
+            resp = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+            if resp.status_code != 200:
+                return None
+
+            data = resp.json()
+            result = data.get("chart", {}).get("result")
+            if not result or not isinstance(result, list) or len(result) == 0:
+                return None
+
+            chart = result[0]
+            timestamps = chart.get("timestamp", [])
+            quotes = chart.get("indicators", {}).get("quote", [])
+            if not quotes:
+                return None
+
+            quote = quotes[0]
+            opens = quote.get("open", [])
+            highs = quote.get("high", [])
+            lows = quote.get("low", [])
+            closes = quote.get("close", [])
+            volumes = quote.get("volume", [])
+
+            points = []
+            for i, ts in enumerate(timestamps):
+                from datetime import datetime
+                dt = datetime.fromtimestamp(ts)
+                points.append(StockHistoryPoint(
+                    date=dt.strftime("%Y-%m-%d"),
+                    open=safe_float(opens[i]) if i < len(opens) and opens[i] is not None else 0.0,
+                    high=safe_float(highs[i]) if i < len(highs) and highs[i] is not None else 0.0,
+                    low=safe_float(lows[i]) if i < len(lows) and lows[i] is not None else 0.0,
+                    close=safe_float(closes[i]) if i < len(closes) and closes[i] is not None else 0.0,
+                    volume=safe_int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
                 ))
-                
-            # Save to cache
-            MarketDataService._history_cache[cache_key] = (now, history_points)
-            return history_points
-        except Exception as e:
-            print(f"Error fetching history for {ticker}: {e}")
-            return []
+
+            return points if points else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_history_from_yfinance(ticker: str, period: str) -> Optional[List[StockHistoryPoint]]:
+        period_map = {
+            "1m": ("1mo", "1d"),
+            "6m": ("6mo", "1d"),
+            "1y": ("1y", "1d"),
+            "5y": ("5y", "1wk"),
+        }
+        yf_period, yf_interval = period_map.get(period, ("1mo", "1d"))
+
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            df = ticker_obj.history(period=yf_period, interval=yf_interval)
+            if df.empty:
+                return None
+
+            points = []
+            for date_index, row in df.iterrows():
+                date_str = date_index.strftime("%Y-%m-%d")
+                points.append(StockHistoryPoint(
+                    date=date_str,
+                    open=safe_float(row.get("Open")) or 0.0,
+                    high=safe_float(row.get("High")) or 0.0,
+                    low=safe_float(row.get("Low")) or 0.0,
+                    close=safe_float(row.get("Close")) or 0.0,
+                    volume=safe_int(row.get("Volume")) or 0,
+                ))
+            return points if points else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def get_stock_history(ticker: str, period: str) -> List[StockHistoryPoint]:
+        ticker_upper = ticker.upper().strip()
+        cache_key = (ticker_upper, period)
+        now = datetime.now()
+
+        if cache_key in MarketDataService._history_cache:
+            cache_time, cached_data = MarketDataService._history_cache[cache_key]
+            if (now - cache_time).total_seconds() < 300:
+                return cached_data
+
+        # Tier 1: Finnhub
+        points = MarketDataService._build_history_from_finnhub(ticker_upper, period)
+        if points:
+            MarketDataService._history_cache[cache_key] = (now, points)
+            return points
+
+        # Tier 2: Direct Yahoo HTTP
+        points = MarketDataService._build_history_from_yahoo_direct(ticker_upper, period)
+        if points:
+            MarketDataService._history_cache[cache_key] = (now, points)
+            return points
+
+        # Tier 3: yfinance fallback
+        points = MarketDataService._build_history_from_yfinance(ticker_upper, period)
+        if points:
+            MarketDataService._history_cache[cache_key] = (now, points)
+            return points
+
+        return []
 
     @staticmethod
     def get_stock_news(ticker: str) -> List[StockNewsArticle]:
