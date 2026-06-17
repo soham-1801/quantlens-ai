@@ -155,19 +155,29 @@ class MarketDataService:
         ticker_upper = ticker.upper().strip()
         now = datetime.now()
 
+        try:
+            yf_version = getattr(yf, "__version__", "unknown")
+        except Exception:
+            yf_version = "unknown"
+        print(f"[OVERVIEW] yfinance version: {yf_version}")
+
         # 5-minute cache (overview data is relatively stable)
         if ticker_upper in MarketDataService._overview_cache:
             cache_time, cached_data = MarketDataService._overview_cache[ticker_upper]
             if (now - cache_time).total_seconds() < 300:
+                print(f"[OVERVIEW] Cache hit for {ticker_upper}")
                 return cached_data
 
         try:
             ticker_obj = yf.Ticker(ticker_upper)
+            print(f"[OVERVIEW] Ticker object created for {ticker_upper}")
 
             # ── Source 1: fast_info (uses /v8/finance/chart/ — rarely rate-limited) ──
             fi = {}
+            print(f"[OVERVIEW] Fetching fast_info for {ticker_upper}")
             try:
                 raw = ticker_obj.fast_info
+                print(f"[OVERVIEW] fast_info type: {type(raw).__name__}")
                 fi = {
                     "currentPrice": safe_float(coalesce(getattr(raw, "currentPrice", None), getattr(raw, "regularMarketPrice", None))),
                     "previousClose": safe_float(getattr(raw, "previousClose", None)),
@@ -185,13 +195,18 @@ class MarketDataService:
                     "marketCap": safe_int(getattr(raw, "marketCap", None)),
                     "avgVolume": safe_int(coalesce(getattr(raw, "averageVolume", None), getattr(raw, "averageDailyVolume10Day", None))),
                 }
-            except Exception:
+                print(f"[OVERVIEW] fast_info success for {ticker_upper}")
+            except Exception as e:
+                print(f"[OVERVIEW] fast_info failed for {ticker_upper}: {type(e).__name__}: {e}")
+                traceback.print_exc()
                 fi = {}
 
             # ── Source 2: history(period="5d") for OHLCV (very reliable endpoint) ──
             hist = {}
+            print(f"[OVERVIEW] Fetching history(5d) for {ticker_upper}")
             try:
                 df = ticker_obj.history(period="5d")
+                print(f"[OVERVIEW] history rows: {len(df)}, empty: {df.empty}")
                 if not df.empty:
                     last = df.iloc[-1]
                     hist = {
@@ -203,16 +218,25 @@ class MarketDataService:
                     }
                     if len(df) >= 2:
                         hist["previousClose"] = safe_float(df.iloc[-2].get("Close"))
-            except Exception:
+                print(f"[OVERVIEW] history success for {ticker_upper}")
+            except Exception as e:
+                print(f"[OVERVIEW] history failed for {ticker_upper}: {type(e).__name__}: {e}")
+                traceback.print_exc()
                 hist = {}
 
             # ── Source 3: info dict (rate-limited — used only for company metadata) ──
             info = {}
+            print(f"[OVERVIEW] Fetching info for {ticker_upper}")
             try:
                 raw_info = ticker_obj.info
+                print(f"[OVERVIEW] info type: {type(raw_info).__name__}")
                 if isinstance(raw_info, dict):
                     info = raw_info
-            except Exception:
+                    print(f"[OVERVIEW] info keys: {len(info)}")
+                print(f"[OVERVIEW] info success for {ticker_upper}")
+            except Exception as e:
+                print(f"[OVERVIEW] info failed for {ticker_upper}: {type(e).__name__}: {e}")
+                traceback.print_exc()
                 info = {}
 
             def first(*values):
@@ -271,11 +295,17 @@ class MarketDataService:
                 ),
             )
 
+            fi_keys = [k for k, v in fi.items() if v is not None]
+            hist_keys = [k for k, v in hist.items() if v is not None]
+            info_keys = list(info.keys())[:20] if isinstance(info, dict) else []
+            print(f"[OVERVIEW] Summary for {ticker_upper}: fi_keys={fi_keys}, hist_keys={hist_keys}, info_top_keys={info_keys}, current_price={current_price}, name={name}")
+
             if info.get("longName") or info.get("shortName"):
                 MarketDataService._overview_cache[ticker_upper] = (now, result)
             return result
 
         except Exception as e:
+            print(f"[OVERVIEW] Outer exception for {ticker_upper}: {type(e).__name__}: {e}")
             traceback.print_exc()
             print(f"Error fetching stock overview for {ticker_upper}: {e}")
             return None
