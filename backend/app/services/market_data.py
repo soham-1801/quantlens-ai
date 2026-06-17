@@ -157,6 +157,7 @@ class MarketDataService:
         try:
             ticker_obj = yf.Ticker(ticker_upper)
             info = ticker_obj.info
+            print(f"DEBUG {ticker_upper}: {info}")
  
             if not info or len(info) == 0:
                 return None
