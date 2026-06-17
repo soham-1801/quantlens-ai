@@ -665,3 +665,193 @@ class MarketDataService:
         except Exception as e:
             print(f"Error fetching news for {ticker_upper}: {e}")
             return []
+
+    @staticmethod
+    def get_stock_earnings(ticker: str) -> Optional[Dict[str, Any]]:
+        ticker_upper = ticker.upper().strip()
+
+        # Tier 1: Finnhub
+        result = MarketDataService._build_earnings_from_finnhub(ticker_upper)
+        if result:
+            return result
+
+        # Tier 2: Direct Yahoo HTTP
+        result = MarketDataService._build_earnings_from_yahoo_direct(ticker_upper)
+        if result:
+            return result
+
+        # Tier 3: yfinance fallback
+        result = MarketDataService._build_earnings_from_yfinance(ticker_upper)
+        if result:
+            return result
+
+        return None
+
+    @staticmethod
+    def _build_earnings_from_finnhub(ticker: str) -> Optional[Dict[str, Any]]:
+        api_key = settings.FINNHUB_API_KEY
+        if not api_key:
+            return None
+
+        try:
+            earnings_resp = requests.get(
+                f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker}&token={api_key}",
+                timeout=10,
+            )
+            if earnings_resp.status_code != 200:
+                return None
+
+            earnings_data = earnings_resp.json()
+            if not earnings_data or not isinstance(earnings_data, list):
+                return None
+
+            from datetime import datetime, timedelta, timezone
+            today = datetime.now()
+            from_date = today.strftime("%Y-%m-%d")
+            to_date = (today + timedelta(days=90)).strftime("%Y-%m-%d")
+
+            cal_resp = requests.get(
+                f"https://finnhub.io/api/v1/stock/earnings-calendar?symbol={ticker}&from={from_date}&to={to_date}&token={api_key}",
+                timeout=10,
+            )
+
+            next_date = None
+            revenue_est = None
+            eps_est = None
+
+            if cal_resp.status_code == 200:
+                cal_data = cal_resp.json()
+                cal_entries = cal_data.get("earningsCalendar", [])
+                if cal_entries:
+                    entry = cal_entries[0]
+                    date_str = entry.get("date")
+                    if date_str:
+                        try:
+                            dt = datetime.strptime(date_str, "%Y-%m-%d")
+                            next_date = dt.strftime("%b %d, %Y")
+                        except (ValueError, AttributeError):
+                            pass
+                    eps_est = safe_float(entry.get("epsEstimate"))
+                    revenue_est = safe_float(entry.get("revenueEstimate"))
+
+            prev_eps = None
+            surprise = None
+            for er in earnings_data:
+                actual = safe_float(er.get("actual"))
+                if actual is not None:
+                    prev_eps = actual
+                if surprise is None:
+                    surprise = safe_float(er.get("surprise"))
+
+            if next_date is None and prev_eps is None and eps_est is None:
+                return None
+
+            return {
+                "next_earnings_date": next_date,
+                "revenue_estimate": revenue_est,
+                "eps_estimate": eps_est,
+                "previous_eps": prev_eps,
+                "earnings_surprise": surprise,
+            }
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_earnings_from_yahoo_direct(ticker: str) -> Optional[Dict[str, Any]]:
+        try:
+            url = (
+                f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
+                f"?modules=calendarEvents,earnings,earningsHistory"
+            )
+            resp = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+            if resp.status_code != 200:
+                return None
+
+            data = resp.json()
+            result = data.get("quoteSummary", {}).get("result", [])
+            if not result:
+                return None
+
+            quote = result[0]
+
+            calendar = quote.get("calendarEvents", {}).get("earnings", {})
+            earnings_dates = calendar.get("earningsDate", [])
+            next_date = None
+            if earnings_dates:
+                try:
+                    ts = earnings_dates[0].get("raw")
+                    if ts:
+                        from datetime import datetime, timezone
+                        next_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%b %d, %Y")
+                except (ValueError, OSError, TypeError):
+                    pass
+
+            revenue_est = safe_float(calendar.get("revenueEstimate", {}).get("raw"))
+            eps_est = safe_float(calendar.get("epsEstimate", {}).get("raw"))
+
+            earnings = quote.get("earnings", {})
+            prev_eps = safe_float(earnings.get("epsActual", {}).get("raw"))
+            if prev_eps is None:
+                prev_eps = safe_float(earnings.get("epsTrailingTwelveMonths", {}).get("raw"))
+
+            surprise = None
+            earnings_history = quote.get("earningsHistory", {}).get("history", [])
+            if earnings_history:
+                last_item = earnings_history[-1]
+                surprise = safe_float(last_item.get("surprise", {}).get("raw"))
+
+            if next_date is None and prev_eps is None and eps_est is None:
+                return None
+
+            return {
+                "next_earnings_date": next_date,
+                "revenue_estimate": revenue_est,
+                "eps_estimate": eps_est,
+                "previous_eps": prev_eps,
+                "earnings_surprise": surprise,
+            }
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_earnings_from_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            info = ticker_obj.info
+            if not info or not isinstance(info, dict) or not info.get("symbol"):
+                return None
+
+            next_date = None
+            ts = info.get("earningsTimestamp")
+            if ts:
+                try:
+                    from datetime import datetime, timezone
+                    next_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%b %d, %Y")
+                except (ValueError, OSError):
+                    pass
+
+            revenue_est = safe_float(info.get("totalRevenue")) or safe_float(info.get("revenueEstimate"))
+            eps_est = safe_float(info.get("epsForward") or info.get("forwardEps"))
+            prev_eps = safe_float(info.get("trailingEps"))
+
+            surprise = None
+            try:
+                earnings = ticker_obj.earnings
+                if earnings is not None and not earnings.empty:
+                    last_item = earnings.iloc[-1]
+                    surprise = safe_float(last_item.get("surprise"))
+            except Exception:
+                pass
+
+            if next_date is None and prev_eps is None and eps_est is None:
+                return None
+
+            return {
+                "next_earnings_date": next_date,
+                "revenue_estimate": revenue_est,
+                "eps_estimate": eps_est,
+                "previous_eps": prev_eps,
+                "earnings_surprise": surprise,
+            }
+        except Exception:
+            return None

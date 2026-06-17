@@ -1,13 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, timezone
-import yfinance as yf
+from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.api.v1.auth import get_current_user
 from app.models.user import User
 from app.models.sentiment_cache import SentimentCache
 from app.schemas.stock import StockSentimentSummary, StockNewsArticle, ResearchSummary, EarningsSummary
-from app.services.market_data import MarketDataService, safe_float
+from app.services.market_data import MarketDataService
 from app.services.sentiment import SentimentService
 
 router = APIRouter()
@@ -187,41 +186,23 @@ def get_ticker_earnings(
 ):
     ticker_upper = ticker.upper().strip()
 
-    ticker_obj = yf.Ticker(ticker_upper)
-    info = ticker_obj.info
+    # Uses 3-tier fallback: Finnhub -> Direct Yahoo HTTP -> yfinance
+    earnings_data = MarketDataService.get_stock_earnings(ticker_upper)
 
-    if not info or not info.get("symbol"):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Stock ticker '{ticker_upper}' is invalid or has no data."
+    if not earnings_data:
+        return EarningsSummary(
+            ticker=ticker_upper,
+            next_earnings_date=None,
+            revenue_estimate=None,
+            eps_estimate=None,
+            previous_eps=None,
+            earnings_surprise=None,
+            message="Earnings data currently unavailable"
         )
 
-    next_date = None
-    ts = info.get("earningsTimestamp")
-    if ts:
-        try:
-            next_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%b %d, %Y")
-        except (ValueError, OSError):
-            pass
-
-    revenue_est = safe_float(info.get("totalRevenue")) or (
-        safe_float(info.get("revenueEstimate")) if "revenueEstimate" in info else None
-    )
-    eps_est = safe_float(info.get("epsForward") or info.get("forwardEps"))
-    prev_eps = safe_float(info.get("trailingEps"))
-
-    surprise = None
-    try:
-        earnings = ticker_obj.earnings
-        if earnings is not None and not earnings.empty:
-            last = earnings.iloc[-1]
-            if "surprise" in last:
-                surprise = safe_float(last["surprise"])
-    except Exception:
-        pass
-
-    if not next_date:
-        next_date = "Est. within 45 days"
+    next_date = earnings_data.get("next_earnings_date") or "Est. within 45 days"
+    eps_est = earnings_data.get("eps_estimate")
+    prev_eps = earnings_data.get("previous_eps")
 
     if eps_est is None and prev_eps:
         eps_est = round(prev_eps * 1.05, 2)
@@ -229,8 +210,8 @@ def get_ticker_earnings(
     return EarningsSummary(
         ticker=ticker_upper,
         next_earnings_date=next_date,
-        revenue_estimate=revenue_est,
+        revenue_estimate=earnings_data.get("revenue_estimate"),
         eps_estimate=eps_est,
         previous_eps=prev_eps,
-        earnings_surprise=surprise
+        earnings_surprise=earnings_data.get("earnings_surprise")
     )

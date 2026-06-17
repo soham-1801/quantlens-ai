@@ -65,8 +65,9 @@ class ResearchSummary(BaseModel):
 
 class EarningsSummary(BaseModel):
     ticker: str
-    next_earnings_date: Optional[str]
-    revenue_estimate: Optional[float]
-    eps_estimate: Optional[float]
-    previous_eps: Optional[float]
-    earnings_surprise: Optional[float]
+    next_earnings_date: Optional[str] = None
+    revenue_estimate: Optional[float] = None
+    eps_estimate: Optional[float] = None
+    previous_eps: Optional[float] = None
+    earnings_surprise: Optional[float] = None
+    message: Optional[str] = None
