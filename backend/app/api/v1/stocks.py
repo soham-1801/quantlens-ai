@@ -14,7 +14,7 @@ def search_stocks(
 ):
     return MarketDataService.search_stocks(q)
 
-@router.get("/{ticker}/overview", response_model=StockOverview)
+@router.get("/{ticker}/overview")
 def get_stock_overview(
     ticker: str,
     current_user: User = Depends(get_current_user)
@@ -25,7 +25,12 @@ def get_stock_overview(
             status_code=404,
             detail=f"Stock ticker '{ticker.upper()}' not found or data is unavailable."
         )
-    return overview
+    ticker_upper = ticker.upper().strip()
+    debug = MarketDataService._last_debug.get(ticker_upper, {})
+    return {
+        "overview": overview,
+        "debug": debug
+    }
 
 @router.get("/{ticker}/history", response_model=List[StockHistoryPoint])
 def get_stock_history(

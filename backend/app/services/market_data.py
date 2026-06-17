@@ -36,6 +36,7 @@ class MarketDataService:
     _overview_cache = {}  # ticker_upper: (timestamp, StockOverview)
     _history_cache = {}   # (ticker_upper, period): (timestamp, List[StockHistoryPoint])
     _news_cache = {}      # ticker_upper: (timestamp, List[StockNewsArticle])
+    _last_debug = {}      # ticker_upper: dict of debug info from last call
 
     @staticmethod
     def search_stocks(query: str) -> List[StockSearchResult]:
@@ -298,6 +299,18 @@ class MarketDataService:
             fi_keys = [k for k, v in fi.items() if v is not None]
             hist_keys = [k for k, v in hist.items() if v is not None]
             info_keys = list(info.keys())[:20] if isinstance(info, dict) else []
+            info_count = len(info) if isinstance(info, dict) else 0
+            market_cap_before = first(fi.get("marketCap"), safe_int(info.get("marketCap")))
+            MarketDataService._last_debug[ticker_upper] = {
+                "fi_keys": fi_keys,
+                "hist_keys": hist_keys,
+                "info_top_keys": info_keys,
+                "info_count": info_count,
+                "current_price_before": current_price,
+                "market_cap_before": market_cap_before,
+                "name_before": name,
+                "symbol_before": symbol,
+            }
             print(f"[OVERVIEW] Summary for {ticker_upper}: fi_keys={fi_keys}, hist_keys={hist_keys}, info_top_keys={info_keys}, current_price={current_price}, name={name}")
 
             if info.get("longName") or info.get("shortName"):
