@@ -5,6 +5,12 @@ import traceback
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
+from app.core.config import settings
+
+YAHOO_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+}
 
 def safe_float(val) -> Optional[float]:
     if val is None:
@@ -152,33 +158,166 @@ class MarketDataService:
         return results[:8]
 
     @staticmethod
-    def get_stock_overview(ticker: str) -> Optional[StockOverview]:
-        ticker_upper = ticker.upper().strip()
-        now = datetime.now()
+    def _raw(obj: Any, *keys: str) -> Any:
+        """Extract the 'raw' numeric value from a Yahoo API nested dict."""
+        current = obj
+        for k in keys:
+            if isinstance(current, dict):
+                current = current.get(k)
+            else:
+                return None
+        if isinstance(current, dict):
+            return current.get("raw", current)
+        return current
+
+    @staticmethod
+    def _build_from_yahoo_direct(ticker: str) -> Optional[StockOverview]:
+        """Fetch overview via direct HTTP to Yahoo Finance v10 API (bypasses yfinance library)."""
+        url = (
+            f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
+            f"?modules=assetProfile,summaryDetail,price,financialData"
+        )
+        resp = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+        if resp.status_code != 200:
+            MarketDataService._last_debug[ticker] = {"source": "direct_yahoo", "status": resp.status_code}
+            return None
+
+        data = resp.json()
+        results = data.get("quoteSummary", {}).get("result", [])
+        if not results:
+            MarketDataService._last_debug[ticker] = {"source": "direct_yahoo", "status": 200, "result_count": 0}
+            return None
+
+        quote = results[0]
+        ap = quote.get("assetProfile") or {}
+        sd = quote.get("summaryDetail") or {}
+        pr = quote.get("price") or {}
+        fd = quote.get("financialData") or {}
+        ext = MarketDataService._raw
+
+        symbol = pr.get("symbol") or ticker
+        name = pr.get("longName") or pr.get("shortName") or ticker
+        current_price = ext(fd, "currentPrice") or ext(pr, "regularMarketPrice") or ext(sd, "regularMarketPrice")
+
+        raw_dy = ext(sd, "dividendYield")
+        dividend_yield = None
+        if raw_dy is not None:
+            val = safe_float(raw_dy)
+            if val is not None:
+                dividend_yield = val / 100.0
+
+        overview = StockOverview(
+            ticker=symbol.upper(),
+            name=name or ticker,
+            description=ap.get("longBusinessSummary"),
+            sector=ap.get("sector"),
+            industry=ap.get("industry"),
+            exchange=pr.get("exchange"),
+            website=ap.get("website"),
+            market_cap=safe_int(ext(pr, "marketCap") or ext(sd, "marketCap")),
+            pe_ratio=safe_float(ext(sd, "trailingPE") or ext(sd, "forwardPE")),
+            dividend_yield=dividend_yield,
+            current_price=safe_float(current_price),
+            day_high=safe_float(ext(sd, "dayHigh") or ext(pr, "regularMarketDayHigh")),
+            day_low=safe_float(ext(sd, "dayLow") or ext(pr, "regularMarketDayLow")),
+            fifty_two_week_high=safe_float(ext(sd, "fiftyTwoWeekHigh")),
+            fifty_two_week_low=safe_float(ext(sd, "fiftyTwoWeekLow")),
+            volume=safe_int(ext(sd, "volume") or ext(pr, "regularMarketVolume")),
+            previous_close=safe_float(ext(sd, "previousClose") or ext(pr, "previousClose")),
+            open_price=safe_float(ext(sd, "open") or ext(pr, "regularMarketOpen")),
+            eps=safe_float(ext(fd, "epsTrailingTwelveMonths") or ext(fd, "epsForward")),
+            beta=safe_float(ext(sd, "beta")),
+            avg_volume=safe_int(ext(sd, "averageVolume") or ext(sd, "averageDailyVolume10Day")),
+        )
+
+        MarketDataService._last_debug[ticker] = {
+            "source": "direct_yahoo",
+            "current_price_before": current_price,
+            "market_cap_before": safe_int(ext(pr, "marketCap") or ext(sd, "marketCap")),
+            "name_before": name,
+            "symbol_before": symbol,
+        }
+        return overview
+
+    @staticmethod
+    def _build_from_finnhub(ticker: str) -> Optional[StockOverview]:
+        """Fetch overview from Finnhub API (requires FINNHUB_API_KEY in settings)."""
+        api_key = settings.FINNHUB_API_KEY
+        if not api_key:
+            return None
 
         try:
-            yf_version = getattr(yf, "__version__", "unknown")
-        except Exception:
-            yf_version = "unknown"
-        print(f"[OVERVIEW] yfinance version: {yf_version}")
+            quote_resp = requests.get(
+                f"https://finnhub.io/api/v1/quote?symbol={ticker}&token={api_key}",
+                timeout=10,
+            )
+            profile_resp = requests.get(
+                f"https://finnhub.io/api/v1/stock/profile2?symbol={ticker}&token={api_key}",
+                timeout=10,
+            )
+            metric_resp = requests.get(
+                f"https://finnhub.io/api/v1/stock/metric?symbol={ticker}&metric=all&token={api_key}",
+                timeout=10,
+            )
 
-        # 5-minute cache (overview data is relatively stable)
-        if ticker_upper in MarketDataService._overview_cache:
-            cache_time, cached_data = MarketDataService._overview_cache[ticker_upper]
-            if (now - cache_time).total_seconds() < 300:
-                print(f"[OVERVIEW] Cache hit for {ticker_upper}")
-                return cached_data
+            if quote_resp.status_code != 200 or profile_resp.status_code != 200:
+                MarketDataService._last_debug[ticker] = {"source": "finnhub", "status": quote_resp.status_code}
+                return None
 
+            quote = quote_resp.json()
+            profile = profile_resp.json()
+            metric = metric_resp.json().get("metric", {}) if metric_resp.status_code == 200 else {}
+
+            name = profile.get("name") or ticker
+            current_price = safe_float(quote.get("c"))
+
+            raw_dy = safe_float(metric.get("dividendYield"))
+            dividend_yield = raw_dy / 100.0 if raw_dy is not None and abs(raw_dy) > 1 else raw_dy
+
+            overview = StockOverview(
+                ticker=ticker.upper(),
+                name=name,
+                description=None,
+                sector=None,
+                industry=profile.get("finnhubIndustry"),
+                exchange=profile.get("exchange"),
+                website=profile.get("weburl"),
+                market_cap=safe_int(profile.get("marketCapitalization")),
+                pe_ratio=safe_float(metric.get("peTTM") or metric.get("peNormalizedAnnual")),
+                dividend_yield=dividend_yield,
+                current_price=current_price,
+                day_high=safe_float(quote.get("h")),
+                day_low=safe_float(quote.get("l")),
+                fifty_two_week_high=safe_float(metric.get("52WeekHigh")),
+                fifty_two_week_low=safe_float(metric.get("52WeekLow")),
+                volume=None,
+                previous_close=safe_float(quote.get("pc")),
+                open_price=safe_float(quote.get("o")),
+                eps=safe_float(metric.get("epsTTM") or metric.get("epsBasicExclExtraTTM")),
+                beta=safe_float(metric.get("beta")),
+                avg_volume=safe_int(metric.get("volumeAvg10Days") or metric.get("volumeAvg3months")),
+            )
+
+            MarketDataService._last_debug[ticker] = {
+                "source": "finnhub",
+                "current_price_before": current_price,
+                "market_cap_before": profile.get("marketCapitalization"),
+                "name_before": name,
+                "symbol_before": ticker,
+            }
+            return overview
+        except Exception as e:
+            MarketDataService._last_debug[ticker] = {"source": "finnhub", "error": str(e)}
+            return None
+
+    @staticmethod
+    def _build_from_yfinance(ticker: str) -> Optional[StockOverview]:
+        """Fallback: use yfinance library (may be rate-limited on cloud IPs)."""
         try:
-            ticker_obj = yf.Ticker(ticker_upper)
-            print(f"[OVERVIEW] Ticker object created for {ticker_upper}")
-
-            # ── Source 1: fast_info (uses /v8/finance/chart/ — rarely rate-limited) ──
+            ticker_obj = yf.Ticker(ticker)
             fi = {}
-            print(f"[OVERVIEW] Fetching fast_info for {ticker_upper}")
             try:
                 raw = ticker_obj.fast_info
-                print(f"[OVERVIEW] fast_info type: {type(raw).__name__}")
                 fi = {
                     "currentPrice": safe_float(coalesce(getattr(raw, "currentPrice", None), getattr(raw, "regularMarketPrice", None))),
                     "previousClose": safe_float(getattr(raw, "previousClose", None)),
@@ -196,18 +335,12 @@ class MarketDataService:
                     "marketCap": safe_int(getattr(raw, "marketCap", None)),
                     "avgVolume": safe_int(coalesce(getattr(raw, "averageVolume", None), getattr(raw, "averageDailyVolume10Day", None))),
                 }
-                print(f"[OVERVIEW] fast_info success for {ticker_upper}")
-            except Exception as e:
-                print(f"[OVERVIEW] fast_info failed for {ticker_upper}: {type(e).__name__}: {e}")
-                traceback.print_exc()
+            except Exception:
                 fi = {}
 
-            # ── Source 2: history(period="5d") for OHLCV (very reliable endpoint) ──
             hist = {}
-            print(f"[OVERVIEW] Fetching history(5d) for {ticker_upper}")
             try:
                 df = ticker_obj.history(period="5d")
-                print(f"[OVERVIEW] history rows: {len(df)}, empty: {df.empty}")
                 if not df.empty:
                     last = df.iloc[-1]
                     hist = {
@@ -219,25 +352,15 @@ class MarketDataService:
                     }
                     if len(df) >= 2:
                         hist["previousClose"] = safe_float(df.iloc[-2].get("Close"))
-                print(f"[OVERVIEW] history success for {ticker_upper}")
-            except Exception as e:
-                print(f"[OVERVIEW] history failed for {ticker_upper}: {type(e).__name__}: {e}")
-                traceback.print_exc()
+            except Exception:
                 hist = {}
 
-            # ── Source 3: info dict (rate-limited — used only for company metadata) ──
             info = {}
-            print(f"[OVERVIEW] Fetching info for {ticker_upper}")
             try:
                 raw_info = ticker_obj.info
-                print(f"[OVERVIEW] info type: {type(raw_info).__name__}")
                 if isinstance(raw_info, dict):
                     info = raw_info
-                    print(f"[OVERVIEW] info keys: {len(info)}")
-                print(f"[OVERVIEW] info success for {ticker_upper}")
-            except Exception as e:
-                print(f"[OVERVIEW] info failed for {ticker_upper}: {type(e).__name__}: {e}")
-                traceback.print_exc()
+            except Exception:
                 info = {}
 
             def first(*values):
@@ -246,8 +369,8 @@ class MarketDataService:
                         return v
                 return None
 
-            symbol = info.get("symbol") or ticker_upper
-            name = first(info.get("longName"), info.get("shortName"), ticker_upper)
+            symbol = info.get("symbol") or ticker
+            name = first(info.get("longName"), info.get("shortName"), ticker)
             if not symbol:
                 return None
 
@@ -296,32 +419,51 @@ class MarketDataService:
                 ),
             )
 
-            fi_keys = [k for k, v in fi.items() if v is not None]
-            hist_keys = [k for k, v in hist.items() if v is not None]
-            info_keys = list(info.keys())[:20] if isinstance(info, dict) else []
-            info_count = len(info) if isinstance(info, dict) else 0
-            market_cap_before = first(fi.get("marketCap"), safe_int(info.get("marketCap")))
-            MarketDataService._last_debug[ticker_upper] = {
-                "fi_keys": fi_keys,
-                "hist_keys": hist_keys,
-                "info_top_keys": info_keys,
-                "info_count": info_count,
+            MarketDataService._last_debug[ticker] = {
+                "source": "yfinance",
+                "fi_keys": [k for k, v in fi.items() if v is not None],
+                "hist_keys": [k for k, v in hist.items() if v is not None],
+                "info_keys": list(info.keys())[:10] if isinstance(info, dict) else [],
                 "current_price_before": current_price,
-                "market_cap_before": market_cap_before,
+                "market_cap_before": first(fi.get("marketCap"), safe_int(info.get("marketCap"))),
                 "name_before": name,
                 "symbol_before": symbol,
             }
-            print(f"[OVERVIEW] Summary for {ticker_upper}: fi_keys={fi_keys}, hist_keys={hist_keys}, info_top_keys={info_keys}, current_price={current_price}, name={name}")
-
-            if info.get("longName") or info.get("shortName"):
-                MarketDataService._overview_cache[ticker_upper] = (now, result)
             return result
-
         except Exception as e:
-            print(f"[OVERVIEW] Outer exception for {ticker_upper}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-            print(f"Error fetching stock overview for {ticker_upper}: {e}")
+            MarketDataService._last_debug[ticker] = {"source": "yfinance", "error": str(e)}
             return None
+
+    @staticmethod
+    def get_stock_overview(ticker: str) -> Optional[StockOverview]:
+        ticker_upper = ticker.upper().strip()
+        now = datetime.now()
+
+        # 5-minute cache
+        if ticker_upper in MarketDataService._overview_cache:
+            cache_time, cached_data = MarketDataService._overview_cache[ticker_upper]
+            if (now - cache_time).total_seconds() < 300:
+                return cached_data
+
+        # Tier 1: Finnhub (requires FINNHUB_API_KEY env var, works from any cloud IP)
+        overview = MarketDataService._build_from_finnhub(ticker_upper)
+        if overview and overview.current_price is not None:
+            MarketDataService._overview_cache[ticker_upper] = (now, overview)
+            return overview
+
+        # Tier 2: Direct Yahoo HTTP call (bypasses yfinance library, uses Chrome UA)
+        overview = MarketDataService._build_from_yahoo_direct(ticker_upper)
+        if overview and overview.current_price is not None:
+            MarketDataService._overview_cache[ticker_upper] = (now, overview)
+            return overview
+
+        # Tier 3: yfinance fallback (may be rate-limited on cloud IPs)
+        overview = MarketDataService._build_from_yfinance(ticker_upper)
+        if overview and overview.current_price is not None:
+            MarketDataService._overview_cache[ticker_upper] = (now, overview)
+            return overview
+
+        return None
 
     @staticmethod
     def get_stock_history(ticker: str, period: str) -> List[StockHistoryPoint]:

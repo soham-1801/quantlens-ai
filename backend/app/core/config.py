@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     
     # Database URL - fallback to SQLite if PostgreSQL is not configured
     DATABASE_URL: str = "sqlite:///./quantlens.db"
-    
+
+    # Finnhub API (free tier: 60 calls/min, register at https://finnhub.io)
+    FINNHUB_API_KEY: str = ""
+
     # Allow reading from .env file
     model_config = SettingsConfigDict(
         env_file=".env",
