@@ -1,11 +1,13 @@
 import yfinance as yf
 import requests
 import re
-import traceback
+import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -668,71 +670,51 @@ class MarketDataService:
     @staticmethod
     def get_stock_earnings(ticker: str) -> Optional[Dict[str, Any]]:
         ticker_upper = ticker.upper().strip()
-        print(f"[EARNINGS] get_stock_earnings({ticker_upper})")
 
         # Tier 1: Finnhub
-        print(f"[EARNINGS] Trying Tier 1 (Finnhub) for {ticker_upper}")
         result = MarketDataService._build_earnings_from_finnhub(ticker_upper)
         if result:
-            print(f"[EARNINGS] Tier 1 (Finnhub) SUCCESS for {ticker_upper}")
             return result
-        print(f"[EARNINGS] Tier 1 (Finnhub) FAILED for {ticker_upper}")
 
         # Tier 2: Direct Yahoo HTTP
-        print(f"[EARNINGS] Trying Tier 2 (Yahoo Direct) for {ticker_upper}")
         result = MarketDataService._build_earnings_from_yahoo_direct(ticker_upper)
         if result:
-            print(f"[EARNINGS] Tier 2 (Yahoo Direct) SUCCESS for {ticker_upper}")
             return result
-        print(f"[EARNINGS] Tier 2 (Yahoo Direct) FAILED for {ticker_upper}")
 
         # Tier 3: yfinance fallback
-        print(f"[EARNINGS] Trying Tier 3 (yfinance) for {ticker_upper}")
         result = MarketDataService._build_earnings_from_yfinance(ticker_upper)
         if result:
-            print(f"[EARNINGS] Tier 3 (yfinance) SUCCESS for {ticker_upper}")
             return result
-        print(f"[EARNINGS] Tier 3 (yfinance) FAILED for {ticker_upper}")
 
-        print(f"[EARNINGS] All tiers FAILED for {ticker_upper}")
+        logger.warning("All earnings tiers exhausted for %s", ticker_upper)
         return None
 
     @staticmethod
     def _build_earnings_from_finnhub(ticker: str) -> Optional[Dict[str, Any]]:
         api_key = settings.FINNHUB_API_KEY
         if not api_key:
-            print(f"[EARNINGS_FINNHUB] No FINNHUB_API_KEY configured")
             return None
 
-        # --- Historical earnings ---
+        # Historical earnings
         try:
             url_hist = f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker}&token={api_key}"
-            print(f"[EARNINGS_FINNHUB] GET {url_hist.replace(api_key, '***')}")
             earnings_resp = requests.get(url_hist, timeout=10)
-            print(f"[EARNINGS_FINNHUB] Status: {earnings_resp.status_code}")
             if earnings_resp.status_code != 200:
-                print(f"[EARNINGS_FINNHUB] Non-200: {earnings_resp.text[:200]}")
+                logger.warning("Finnhub earnings API returned %s for %s", earnings_resp.status_code, ticker)
                 return None
 
             earnings_data = earnings_resp.json()
-            print(f"[EARNINGS_FINNHUB] Response type={type(earnings_data).__name__}")
             if not isinstance(earnings_data, list):
-                print(f"[EARNINGS_FINNHUB] Not a list: {type(earnings_data).__name__}")
+                logger.warning("Finnhub earnings response not a list for %s", ticker)
                 return None
-            print(f"[EARNINGS_FINNHUB] Entry count: {len(earnings_data)}")
-            if earnings_data:
-                print(f"[EARNINGS_FINNHUB] First entry keys: {list(earnings_data[0].keys())}")
-                print(f"[EARNINGS_FINNHUB] First entry actual={earnings_data[0].get('actual')}, surprise={earnings_data[0].get('surprise')}")
-            else:
-                print(f"[EARNINGS_FINNHUB] Empty list - no historical earnings data")
+
+            if not earnings_data:
+                logger.warning("Finnhub earnings empty list for %s", ticker)
                 return None
-        except Exception as e:
-            print(f"[EARNINGS_FINNHUB] EXCEPTION (historical): {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            logger.exception("Finnhub earnings API request failed for %s", ticker)
             return None
 
-        # Extract prev_eps and surprise from historical data
         prev_eps = None
         surprise = None
         for er in earnings_data:
@@ -741,14 +723,13 @@ class MarketDataService:
                 prev_eps = actual
             if surprise is None:
                 surprise = safe_float(er.get("surprise"))
-        print(f"[EARNINGS_FINNHUB] prev_eps={prev_eps}, surprise={surprise}")
 
-        # --- Earnings calendar (isolated - failure won't cascade) ---
+        # Earnings calendar (isolated - failure won't cascade)
         next_date = None
         revenue_est = None
         eps_est = None
         try:
-            from datetime import datetime, timedelta
+            from datetime import timedelta
             today = datetime.now()
             from_date = today.strftime("%Y-%m-%d")
             to_date = (today + timedelta(days=90)).strftime("%Y-%m-%d")
@@ -757,40 +738,28 @@ class MarketDataService:
                 f"https://finnhub.io/api/v1/calendar/earnings"
                 f"?symbol={ticker}&from={from_date}&to={to_date}&token={api_key}"
             )
-            print(f"[EARNINGS_FINNHUB] CAL GET {url_cal.replace(api_key, '***')}")
             cal_resp = requests.get(url_cal, timeout=10)
-            print(f"[EARNINGS_FINNHUB] CAL Status: {cal_resp.status_code}")
             if cal_resp.status_code == 200:
                 cal_data = cal_resp.json()
-                print(f"[EARNINGS_FINNHUB] CAL keys: {list(cal_data.keys()) if isinstance(cal_data, dict) else 'not dict'}")
                 cal_entries = cal_data.get("earningsCalendar", []) if isinstance(cal_data, dict) else []
-                print(f"[EARNINGS_FINNHUB] CAL entries count: {len(cal_entries)}")
                 if cal_entries:
                     entry = cal_entries[0]
-                    print(f"[EARNINGS_FINNHUB] CAL first entry: { {k:v for k,v in entry.items() if k != 'token'} }")
                     date_str = entry.get("date")
                     if date_str:
                         try:
                             dt = datetime.strptime(date_str, "%Y-%m-%d")
                             next_date = dt.strftime("%b %d, %Y")
-                        except (ValueError, AttributeError) as e:
-                            print(f"[EARNINGS_FINNHUB] CAL date parse error: {e}")
+                        except (ValueError, AttributeError):
+                            pass
                     eps_est = safe_float(entry.get("epsEstimate"))
                     revenue_est = safe_float(entry.get("revenueEstimate"))
-                    print(f"[EARNINGS_FINNHUB] CAL next_date={next_date}, eps_est={eps_est}, revenue_est={revenue_est}")
-                else:
-                    print(f"[EARNINGS_FINNHUB] CAL no entries")
-            else:
-                print(f"[EARNINGS_FINNHUB] CAL non-200: {cal_resp.text[:200]}")
-        except Exception as e:
-            print(f"[EARNINGS_FINNHUB] CAL EXCEPTION (isolated): {e}")
+        except Exception:
+            logger.warning("Finnhub earnings calendar request failed for %s", ticker)
 
-        print(f"[EARNINGS_FINNHUB] Guard: next_date={next_date}, prev_eps={prev_eps}, eps_est={eps_est}")
         if next_date is None and prev_eps is None and eps_est is None:
-            print(f"[EARNINGS_FINNHUB] All three None -> returning None")
+            logger.warning("Finnhub returned no earnings data for %s", ticker)
             return None
 
-        print(f"[EARNINGS_FINNHUB] SUCCESS - returning data")
         return {
             "next_earnings_date": next_date,
             "revenue_estimate": revenue_est,
@@ -802,7 +771,6 @@ class MarketDataService:
     @staticmethod
     def _build_earnings_from_yahoo_direct(ticker: str) -> Optional[Dict[str, Any]]:
         try:
-            print(f"[EARNINGS_YAHOO] Getting crumb for {ticker}")
             y_session = requests.Session()
             y_session.headers.update({"User-Agent": YAHOO_HEADERS["User-Agent"]})
             y_session.get("https://fc.yahoo.com/", timeout=10)
@@ -811,20 +779,18 @@ class MarketDataService:
                 timeout=10,
             )
             if crumb_resp.status_code != 200:
-                print(f"[EARNINGS_YAHOO] Crumb failed: {crumb_resp.status_code}")
+                logger.warning("Yahoo crumb acquisition failed for %s", ticker)
                 return None
 
             crumb = crumb_resp.text.strip()
-            print(f"[EARNINGS_YAHOO] Got crumb: {crumb[:20]}...")
 
             url = (
                 f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
                 f"?modules=calendarEvents,earnings,earningsHistory&crumb={crumb}"
             )
             resp = y_session.get(url, timeout=15)
-            print(f"[EARNINGS_YAHOO] quoteSummary status: {resp.status_code}")
             if resp.status_code != 200:
-                print(f"[EARNINGS_YAHOO] Body: {resp.text[:300]}")
+                logger.warning("Yahoo quoteSummary returned %s for %s", resp.status_code, ticker)
                 return None
 
             data = resp.json()
@@ -833,9 +799,7 @@ class MarketDataService:
                 return None
 
             quote = result[0]
-            print(f"[EARNINGS_YAHOO] Modules: {list(quote.keys())}")
 
-            # calendarEvents.earnings
             calendar = quote.get("calendarEvents", {}).get("earnings", {})
             earnings_dates = calendar.get("earningsDate", [])
             next_date = None
@@ -847,24 +811,19 @@ class MarketDataService:
                 except (ValueError, OSError, TypeError):
                     pass
             eps_est = safe_float(calendar.get("earningsAverage", {}).get("raw"))
-            print(f"[EARNINGS_YAHOO] next_date={next_date}, eps_est={eps_est}")
 
-            # earnings.earningsChart.quarterly[0].actual.raw
             earnings = quote.get("earnings", {})
             quarterly = earnings.get("earningsChart", {}).get("quarterly", [])
             prev_eps = None
             if quarterly:
                 prev_eps = safe_float(quarterly[0].get("actual", {}).get("raw"))
-                print(f"[EARNINGS_YAHOO] prev_eps from quarterly[0].actual: {prev_eps}")
 
-            # earningsHistory.history[-1].epsDifference.raw
             surprise = None
             earnings_history = quote.get("earningsHistory", {}).get("history", [])
             if earnings_history:
                 last_item = earnings_history[-1]
                 surprise = safe_float(last_item.get("epsDifference", {}).get("raw"))
 
-            print(f"[EARNINGS_YAHOO] Guard: next_date={next_date}, prev_eps={prev_eps}, eps_est={eps_est}")
             if next_date is None and prev_eps is None and eps_est is None:
                 return None
 
@@ -875,69 +834,49 @@ class MarketDataService:
                 "previous_eps": prev_eps,
                 "earnings_surprise": surprise,
             }
-        except Exception as e:
-            print(f"[EARNINGS_YAHOO] EXCEPTION: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            logger.exception("Yahoo earnings request failed for %s", ticker)
             return None
 
     @staticmethod
     def _build_earnings_from_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
         try:
-            print(f"[EARNINGS_YFINANCE] Creating Ticker for {ticker}")
             ticker_obj = yf.Ticker(ticker)
-            print(f"[EARNINGS_YFINANCE] Fetching info...")
             info = ticker_obj.info
-            print(f"[EARNINGS_YFINANCE] info type={type(info).__name__}")
             if not info or not isinstance(info, dict):
-                print(f"[EARNINGS_YFINANCE] info is not a dict")
+                logger.warning("yfinance info not a dict for %s", ticker)
                 return None
             if not info.get("symbol"):
-                print(f"[EARNINGS_YFINANCE] info has no symbol")
+                logger.warning("yfinance info has no symbol for %s", ticker)
                 return None
-
-            print(f"[EARNINGS_YFINANCE] info keys count: {len(info)}")
 
             next_date = None
             ts = info.get("earningsTimestamp")
-            print(f"[EARNINGS_YFINANCE] earningsTimestamp={ts} (type={type(ts).__name__})")
             if ts:
                 try:
                     next_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%b %d, %Y")
-                    print(f"[EARNINGS_YFINANCE] next_date={next_date}")
-                except (ValueError, OSError) as e:
-                    print(f"[EARNINGS_YFINANCE] earningsTimestamp parse error: {e}")
+                except (ValueError, OSError):
+                    pass
 
             revenue_est = safe_float(info.get("totalRevenue")) or safe_float(info.get("revenueEstimate"))
             eps_est = safe_float(info.get("epsForward") or info.get("forwardEps"))
             prev_eps = safe_float(info.get("trailingEps"))
-            print(f"[EARNINGS_YFINANCE] totalRevenue={info.get('totalRevenue')}, revenueEstimate={info.get('revenueEstimate')}, epsForward={info.get('epsForward')}, forwardEps={info.get('forwardEps')}, trailingEps={info.get('trailingEps')}")
-            print(f"[EARNINGS_YFINANCE] revenue_est={revenue_est}, eps_est={eps_est}, prev_eps={prev_eps}")
 
             surprise = None
             try:
-                print(f"[EARNINGS_YFINANCE] Fetching ticker_obj.earnings...")
                 earnings = ticker_obj.earnings
-                print(f"[EARNINGS_YFINANCE] earnings type={type(earnings).__name__}")
                 if earnings is not None and not earnings.empty:
-                    print(f"[EARNINGS_YFINANCE] earnings columns: {list(earnings.columns)}")
                     last_item = earnings.iloc[-1]
-                    print(f"[EARNINGS_YFINANCE] earnings last row: {dict(last_item)}")
                     surprise = safe_float(last_item.get("surprise"))
-                    print(f"[EARNINGS_YFINANCE] surprise={surprise}")
-                else:
-                    print(f"[EARNINGS_YFINANCE] earnings is empty/None")
             except yf.exceptions.YFRateLimitError:
-                print(f"[EARNINGS_YFINANCE] earnings ticker_obj.earnings rate-limited (non-fatal)")
-            except Exception as e:
-                print(f"[EARNINGS_YFINANCE] earnings exception: {e}")
+                logger.warning("yfinance earnings rate-limited for %s", ticker)
+            except Exception:
+                logger.warning("yfinance earnings extraction failed for %s", ticker)
 
-            print(f"[EARNINGS_YFINANCE] Guard: next_date={next_date}, prev_eps={prev_eps}, eps_est={eps_est}")
             if next_date is None and prev_eps is None and eps_est is None:
-                print(f"[EARNINGS_YFINANCE] All three None -> returning None")
+                logger.warning("yfinance returned no earnings data for %s", ticker)
                 return None
 
-            print(f"[EARNINGS_YFINANCE] SUCCESS - returning data")
             return {
                 "next_earnings_date": next_date,
                 "revenue_estimate": revenue_est,
@@ -945,11 +884,9 @@ class MarketDataService:
                 "previous_eps": prev_eps,
                 "earnings_surprise": surprise,
             }
-        except yf.exceptions.YFRateLimitError as e:
-            print(f"[EARNINGS_YFINANCE] YFRateLimitError: {e}")
+        except yf.exceptions.YFRateLimitError:
+            logger.warning("yfinance rate-limited for %s", ticker)
             return None
-        except Exception as e:
-            print(f"[EARNINGS_YFINANCE] EXCEPTION: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            logger.exception("yfinance earnings request failed for %s", ticker)
             return None
