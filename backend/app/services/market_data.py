@@ -643,14 +643,35 @@ class MarketDataService:
             news = ticker_obj.news
             
             if not news:
+                logger.warning("No news returned by yfinance for %s", ticker_upper)
                 return []
                 
             articles = []
             for article in news:
-                title = article.get("title")
-                publisher = article.get("publisher") or "Unknown"
-                link = article.get("link")
+                content = article.get("content") or {}
+                
+                # New schema: content.title, content.canonicalUrl.url, content.pubDate, content.provider.displayName
+                title = content.get("title") or article.get("title")
+                publisher = (
+                    content.get("provider", {}).get("displayName")
+                    or article.get("publisher")
+                    or "Unknown"
+                )
+                link = (
+                    content.get("canonicalUrl", {}).get("url")
+                    or content.get("clickThroughUrl", {}).get("url")
+                    or article.get("link")
+                )
+                
+                # Parse published_at: new schema uses pubDate string, old uses epoch int
+                pub_date_str = content.get("pubDate")
                 published_at = article.get("providerPublishTime")
+                if pub_date_str and not published_at:
+                    try:
+                        dt = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                        published_at = int(dt.timestamp())
+                    except (ValueError, TypeError):
+                        pass
                 
                 if title and link and published_at:
                     articles.append(StockNewsArticle(
@@ -660,11 +681,13 @@ class MarketDataService:
                         published_at=published_at
                     ))
             
+            logger.info("Fetched %d news articles for %s", len(articles), ticker_upper)
+            
             # Save to cache
             MarketDataService._news_cache[ticker_upper] = (now, articles)
             return articles
         except Exception as e:
-            print(f"Error fetching news for {ticker_upper}: {e}")
+            logger.error("Error fetching news for %s: %s", ticker_upper, e, exc_info=True)
             return []
 
     @staticmethod
