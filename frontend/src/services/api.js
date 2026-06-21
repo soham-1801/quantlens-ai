@@ -1,4 +1,6 @@
-const API_BASE_URL = "http://localhost:8000/api/v1";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://quantlens-ai.onrender.com/api/v1";
 
 const request = async (endpoint, options = {}) => {
   const token = localStorage.getItem("quantlens_token");

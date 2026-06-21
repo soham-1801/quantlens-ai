@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Security
-    SECRET_KEY: str = "supersecretkeychangeinproduction1234567890"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
@@ -16,6 +16,9 @@ class Settings(BaseSettings):
 
     # Finnhub API (free tier: 60 calls/min, register at https://finnhub.io)
     FINNHUB_API_KEY: str = ""
+
+    # CORS — comma-separated list of allowed origins
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173"
 
     # Allow reading from .env file
     model_config = SettingsConfigDict(

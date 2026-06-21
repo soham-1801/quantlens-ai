@@ -20,11 +20,11 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# CORS configuration
+# CORS configuration — read from environment variable
 origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    origin.strip()
+    for origin in settings.BACKEND_CORS_ORIGINS.split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(
