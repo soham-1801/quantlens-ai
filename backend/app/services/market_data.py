@@ -671,7 +671,11 @@ class MarketDataService:
                         dt = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
                         published_at = int(dt.timestamp())
                     except (ValueError, TypeError):
-                        pass
+                        try:
+                            dt = datetime.strptime(pub_date_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S%z")
+                            published_at = int(dt.timestamp())
+                        except (ValueError, TypeError):
+                            pass
                 
                 if title and link and published_at:
                     articles.append(StockNewsArticle(
