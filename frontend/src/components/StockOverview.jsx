@@ -19,7 +19,7 @@ export const StockOverview = ({ overview }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const formatCompactNumber = (val) => {
-    if (val === undefined || val === null) return "N/A";
+    if (val == null || !Number.isFinite(val)) return "N/A";
     if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
     if (val >= 1e9)  return `$${(val / 1e9).toFixed(2)}B`;
     if (val >= 1e6)  return `$${(val / 1e6).toFixed(1)}M`;
@@ -40,45 +40,45 @@ export const StockOverview = ({ overview }) => {
   const statItems = [
     {
       label: "EPS",
-      value: overview.eps != null ? overview.eps.toFixed(2) : "N/A",
+      value: overview.eps != null && Number.isFinite(overview.eps) ? overview.eps.toFixed(2) : "N/A",
       tooltip: "Earnings Per Share (TTM). Net profit divided by outstanding shares.",
     },
     {
       label: "Beta",
-      value: overview.beta != null ? overview.beta.toFixed(2) : "N/A",
+      value: overview.beta != null && Number.isFinite(overview.beta) ? overview.beta.toFixed(2) : "N/A",
       tooltip: "Volatility relative to the overall market. Beta of 1.0 moves with the market.",
     },
     {
       label: "Volume",
-      value: overview.volume ? formatCompactNumber(overview.volume) : "N/A",
+      value: overview.volume != null ? formatCompactNumber(overview.volume) : "N/A",
       tooltip: "Total shares traded during the current session.",
     },
     {
       label: "Div Yield",
-      value: overview.dividend_yield ? `${(overview.dividend_yield * 100).toFixed(2)}%` : "N/A",
+      value: overview.dividend_yield != null && Number.isFinite(overview.dividend_yield) ? `${(overview.dividend_yield * 100).toFixed(2)}%` : "N/A",
       tooltip: "Annual dividend payment divided by the current stock price.",
     },
     {
       label: "Open",
-      value: overview.open_price ? `$${overview.open_price.toFixed(2)}` : "N/A",
+      value: overview.open_price != null && Number.isFinite(overview.open_price) ? `$${overview.open_price.toFixed(2)}` : "N/A",
       tooltip: "Opening trade price for the current session.",
     },
     {
       label: "Prev Close",
-      value: overview.previous_close ? `$${overview.previous_close.toFixed(2)}` : "N/A",
+      value: overview.previous_close != null && Number.isFinite(overview.previous_close) ? `$${overview.previous_close.toFixed(2)}` : "N/A",
       tooltip: "Official closing price from the previous trading session.",
     },
     {
       label: "52W Range",
       value:
-        overview.fifty_two_week_low && overview.fifty_two_week_high
+        overview.fifty_two_week_low != null && Number.isFinite(overview.fifty_two_week_low) && overview.fifty_two_week_high != null && Number.isFinite(overview.fifty_two_week_high)
           ? `$${overview.fifty_two_week_low.toFixed(0)}–$${overview.fifty_two_week_high.toFixed(0)}`
           : "N/A",
       tooltip: "Lowest and highest prices traded over the past 52 weeks.",
     },
     {
       label: "Avg Vol",
-      value: overview.avg_volume ? formatCompactNumber(overview.avg_volume) : "N/A",
+      value: overview.avg_volume != null ? formatCompactNumber(overview.avg_volume) : "N/A",
       tooltip: "Average daily trading volume over the recent period.",
     },
   ];
@@ -240,7 +240,7 @@ export const StockOverview = ({ overview }) => {
               </div>
             )}
 
-            {overview.day_high != null && overview.day_low != null && (
+            {overview.day_high != null && Number.isFinite(overview.day_high) && overview.day_low != null && Number.isFinite(overview.day_low) && (
               <div className="flex items-center justify-between gap-1 py-[3px] border-b border-[#242D3D]/15 min-w-0">
                 <span className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide leading-none truncate">
                   Day Hi
@@ -252,7 +252,7 @@ export const StockOverview = ({ overview }) => {
             )}
 
             {/* Day Low */}
-            {overview.day_low != null && (
+            {overview.day_low != null && Number.isFinite(overview.day_low) && (
               <div className="flex items-center justify-between gap-1 py-[3px] border-b border-[#242D3D]/15 min-w-0">
                 <span className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide leading-none truncate">
                   Day Lo

@@ -125,7 +125,7 @@ const getRatingClass = (rating) => {
 const SAVED_SCREENS_KEY = "quantlens_saved_screens";
 
 const formatMarketCap = (val) => {
-  if (!val) return "—";
+  if (val == null || !Number.isFinite(val)) return "—";
   if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
   if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
   if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
@@ -349,10 +349,10 @@ export const Screener = () => {
         getRating(s._score) || "",
         s.ticker,
         `"${(s.name || "").replace(/"/g, '""')}"`,
-        s.current_price != null ? s.current_price.toFixed(2) : "",
-        dailyPct != null ? `${dailyPct >= 0 ? "+" : ""}${dailyPct.toFixed(2)}` : "",
+        s.current_price != null && Number.isFinite(s.current_price) ? s.current_price.toFixed(2) : "",
+        dailyPct != null && Number.isFinite(dailyPct) ? `${dailyPct >= 0 ? "+" : ""}${dailyPct.toFixed(2)}` : "",
         s.market_cap != null ? String(s.market_cap) : "",
-        s.pe_ratio != null ? s.pe_ratio.toFixed(2) : "",
+        s.pe_ratio != null && Number.isFinite(s.pe_ratio) ? s.pe_ratio.toFixed(2) : "",
         s.sector || "",
         s.volume != null ? String(s.volume) : "",
       ]);
@@ -676,11 +676,11 @@ export const Screener = () => {
                       <span className="text-[9px] text-gray-500 truncate max-w-[110px]">{s.sector || "—"}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-semibold text-gray-300 tabular-nums">
-                          {s.current_price != null ? `$${s.current_price.toFixed(2)}` : "—"}
+                          {s.current_price != null && Number.isFinite(s.current_price) ? `$${s.current_price.toFixed(2)}` : "—"}
                         </span>
                         {(() => {
                           const d = getDailyChange(s);
-                          return d != null ? (
+                          return d != null && Number.isFinite(d) ? (
                             <span className={`text-[10px] font-bold tabular-nums ${d >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                               {d >= 0 ? "+" : ""}{d.toFixed(2)}%
                             </span>
@@ -845,17 +845,17 @@ export const Screener = () => {
                           <td className="px-3 py-3 font-bold text-gray-200">{s.ticker}</td>
                           <td className="px-3 py-3 text-gray-400 max-w-[160px] truncate">{s.name}</td>
                           <td className="px-3 py-3 text-right font-semibold text-gray-200 tabular-nums">
-                            {s.current_price != null ? `$${s.current_price.toFixed(2)}` : "—"}
+                          {s.current_price != null && Number.isFinite(s.current_price) ? `$${s.current_price.toFixed(2)}` : "—"}
                           </td>
                           <td className={`px-3 py-3 text-right font-semibold tabular-nums ${
                             dailyPct != null
                               ? dailyPct >= 0 ? "text-emerald-400" : "text-red-400"
                               : "text-gray-500"
                           }`}>
-                            {dailyPct != null ? `${dailyPct >= 0 ? "+" : ""}${dailyPct.toFixed(2)}%` : "—"}
+                            {dailyPct != null && Number.isFinite(dailyPct) ? `${dailyPct >= 0 ? "+" : ""}${dailyPct.toFixed(2)}%` : "—"}
                           </td>
                           <td className="px-3 py-3 text-right text-gray-300 tabular-nums">{formatMarketCap(s.market_cap)}</td>
-                          <td className="px-3 py-3 text-right text-gray-300 tabular-nums">{s.pe_ratio != null ? s.pe_ratio.toFixed(2) : "—"}</td>
+                          <td className="px-3 py-3 text-right text-gray-300 tabular-nums">{s.pe_ratio != null && Number.isFinite(s.pe_ratio) ? s.pe_ratio.toFixed(2) : "—"}</td>
                           <td className="px-3 py-3 text-gray-400 max-w-[120px] truncate">{s.sector || "—"}</td>
                         </tr>
                       );

@@ -276,6 +276,11 @@ class MarketDataService:
             raw_dy = safe_float(metric.get("dividendYield"))
             dividend_yield = raw_dy / 100.0 if raw_dy is not None and abs(raw_dy) > 1 else raw_dy
 
+            mc_raw = profile.get("marketCapitalization")
+            market_cap = safe_int(mc_raw * 1_000_000) if mc_raw is not None else None
+            if market_cap is not None and market_cap == 0:
+                market_cap = None
+
             overview = StockOverview(
                 ticker=ticker.upper(),
                 name=name,
@@ -284,7 +289,7 @@ class MarketDataService:
                 industry=profile.get("finnhubIndustry"),
                 exchange=profile.get("exchange"),
                 website=profile.get("weburl"),
-                market_cap=safe_int(profile.get("marketCapitalization")),
+                market_cap=market_cap,
                 pe_ratio=safe_float(metric.get("peTTM") or metric.get("peNormalizedAnnual")),
                 dividend_yield=dividend_yield,
                 current_price=current_price,
@@ -292,7 +297,7 @@ class MarketDataService:
                 day_low=safe_float(quote.get("l")),
                 fifty_two_week_high=safe_float(metric.get("52WeekHigh")),
                 fifty_two_week_low=safe_float(metric.get("52WeekLow")),
-                volume=None,
+                volume=safe_int(quote.get("v")),
                 previous_close=safe_float(quote.get("pc")),
                 open_price=safe_float(quote.get("o")),
                 eps=safe_float(metric.get("epsTTM") or metric.get("epsBasicExclExtraTTM")),
@@ -779,7 +784,8 @@ class MarketDataService:
                         except (ValueError, AttributeError):
                             pass
                     eps_est = safe_float(entry.get("epsEstimate"))
-                    revenue_est = safe_float(entry.get("revenueEstimate"))
+                    raw_rev = entry.get("revenueEstimate")
+                    revenue_est = safe_float(raw_rev * 1_000_000) if raw_rev is not None else None
         except Exception:
             logger.warning("Finnhub earnings calendar request failed for %s", ticker)
 

@@ -5,7 +5,7 @@ import { StockLogo } from "../components/StockLogo";
 import { useWatchlist } from "../context/WatchlistContext";
 
 const formatCompact = (val) => {
-  if (val == null) return "N/A";
+  if (val == null || !Number.isFinite(val)) return "N/A";
   if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
   if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
   if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
@@ -25,7 +25,7 @@ const ChangePill = ({ value }) => {
       isPos ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"
     }`}>
       {isPos ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {isPos ? "+" : ""}{value.toFixed(2)}%
+      {Number.isFinite(value) ? `${isPos ? "+" : ""}${value.toFixed(2)}%` : "N/A"}
     </span>
   );
 };
@@ -141,9 +141,9 @@ export const Compare = () => {
       case "price": return formatPrice(overview?.current_price);
       case "change": return change;
       case "marketCap": return formatCompact(overview?.market_cap);
-      case "pe": return overview?.pe_ratio != null ? overview.pe_ratio.toFixed(2) : "N/A";
-      case "eps": return overview?.eps != null ? overview.eps.toFixed(2) : "N/A";
-      case "divYield": return overview?.dividend_yield != null ? `${(overview.dividend_yield * 100).toFixed(2)}%` : "N/A";
+      case "pe": return overview?.pe_ratio != null && Number.isFinite(overview.pe_ratio) ? overview.pe_ratio.toFixed(2) : "N/A";
+      case "eps": return overview?.eps != null && Number.isFinite(overview.eps) ? overview.eps.toFixed(2) : "N/A";
+      case "divYield": return overview?.dividend_yield != null && Number.isFinite(overview.dividend_yield) ? `${(overview.dividend_yield * 100).toFixed(2)}%` : "N/A";
       case "volume": return overview?.volume != null ? overview.volume.toLocaleString() : "N/A";
       case "range": {
         const hi = overview?.fifty_two_week_high;

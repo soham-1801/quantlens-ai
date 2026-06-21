@@ -43,7 +43,7 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
               style={{ color: entry.color }}
             >
               {entry.name}:{" "}
-              {comparison ? `${entry.value >= 0 ? "+" : ""}${entry.value.toFixed(2)}%` : `$${entry.value.toFixed(2)}`}
+              {Number.isFinite(entry.value) ? (comparison ? `${entry.value >= 0 ? "+" : ""}${entry.value.toFixed(2)}%` : `$${entry.value.toFixed(2)}`) : "N/A"}
             </p>
           ))}
         </div>
@@ -152,7 +152,7 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
                 tickLine={false}
                 axisLine={false}
                 domain={["auto", "auto"]}
-                tickFormatter={(v) => comparison ? `${v.toFixed(1)}%` : `$${v.toFixed(0)}`}
+                tickFormatter={(v) => Number.isFinite(v) ? (comparison ? `${v.toFixed(1)}%` : `$${v.toFixed(0)}`) : "N/A"}
                 width={46}
               />
               <Tooltip content={<CustomTooltip />} cursor={<CustomCursor />} />

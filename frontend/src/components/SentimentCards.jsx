@@ -143,8 +143,7 @@ export const SentimentCards = ({ sentiment }) => {
             <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">NLP Sentiment Score</span>
             <div className="flex items-baseline gap-2.5 mt-1">
               <span className={`text-3xl font-black ${config.color}`}>
-                {sentiment.overall_sentiment_score > 0 ? "+" : ""}
-                {sentiment.overall_sentiment_score.toFixed(2)}
+                {Number.isFinite(sentiment.overall_sentiment_score) ? `${sentiment.overall_sentiment_score > 0 ? "+" : ""}${sentiment.overall_sentiment_score.toFixed(2)}` : "N/A"}
               </span>
               <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded border ${config.bg}`}>
                 {sentiment.overall_sentiment_label}
@@ -179,18 +178,18 @@ export const SentimentCards = ({ sentiment }) => {
             <div>
               <p className="text-sm font-black text-white">{trendLabel}</p>
               <p className="text-[10px] text-gray-400 font-light mt-0.5">
-                NLP Shift: {trendDelta >= 0 ? "+" : ""}{trendDelta.toFixed(2)}
+                NLP Shift: {Number.isFinite(trendDelta) ? `${trendDelta >= 0 ? "+" : ""}${trendDelta.toFixed(2)}` : "N/A"}
               </p>
             </div>
           </div>
           <div className="mt-3 space-y-1 text-[10px] text-gray-400 font-light leading-relaxed">
             <div className="flex justify-between">
               <span>Recent Headlines Avg:</span>
-              <span className="font-bold text-white">{recentAvg.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Older Headlines Avg:</span>
-              <span className="font-bold text-white">{olderAvg.toFixed(2)}</span>
+              <span className="font-bold text-white">{Number.isFinite(recentAvg) ? recentAvg.toFixed(2) : "N/A"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Older Headlines Avg:</span>
+                <span className="font-bold text-white">{Number.isFinite(olderAvg) ? olderAvg.toFixed(2) : "N/A"}</span>
             </div>
           </div>
         </div>
@@ -228,7 +227,7 @@ export const SentimentCards = ({ sentiment }) => {
                     </span>
                     {topBullish && (
                       <span className="text-[9px] font-black text-emerald-400">
-                        +{topBullish.sentiment_score.toFixed(2)}
+                        +{Number.isFinite(topBullish.sentiment_score) ? topBullish.sentiment_score.toFixed(2) : "N/A"}
                       </span>
                     )}
                   </div>
@@ -271,7 +270,7 @@ export const SentimentCards = ({ sentiment }) => {
                     </span>
                     {topBearish && (
                       <span className="text-[9px] font-black text-red-400">
-                        {topBearish.sentiment_score.toFixed(2)}
+                        {Number.isFinite(topBearish.sentiment_score) ? topBearish.sentiment_score.toFixed(2) : "N/A"}
                       </span>
                     )}
                   </div>

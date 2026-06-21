@@ -23,7 +23,7 @@ import { useWatchlist } from "../context/WatchlistContext";
 import { StockLogo } from "../components/StockLogo";
 
 const formatPrice = (val) => {
-  if (val == null) return "N/A";
+  if (val == null || !Number.isFinite(val)) return "N/A";
   return `$${val.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -31,7 +31,7 @@ const formatPrice = (val) => {
 };
 
 const formatLargeNumber = (val) => {
-  if (val == null) return "N/A";
+  if (val == null || !Number.isFinite(val)) return "N/A";
   if (val < 0) return "N/A";
   if (val === 0) return "$0";
   if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
@@ -41,7 +41,7 @@ const formatLargeNumber = (val) => {
 };
 
 const formatVolume = (val) => {
-  if (val == null) return "N/A";
+  if (val == null || !Number.isFinite(val)) return "N/A";
   if (val < 0) return "N/A";
   if (val === 0) return "0";
   if (val >= 1e9) return `${(val / 1e9).toFixed(2)}B`;
@@ -51,7 +51,7 @@ const formatVolume = (val) => {
 };
 
 const formatCurrency = (val) => {
-  if (val == null) return "N/A";
+  if (val == null || !Number.isFinite(val)) return "N/A";
   if (val < 0) return "N/A";
   if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
   if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
@@ -461,7 +461,7 @@ export const Watchlist = () => {
         result.push({
           type: "PRICE MOMENTUM",
           ticker: item.ticker,
-          explanation: `${item.ticker} surged ${change.toFixed(1)}% today.`,
+          explanation: `${item.ticker} surged ${Number.isFinite(change) ? change.toFixed(1) : "N/A"}% today.`,
           severity: "Medium",
           severityOrder: 2,
         });
@@ -470,7 +470,7 @@ export const Watchlist = () => {
         result.push({
           type: "PRICE DROP",
           ticker: item.ticker,
-          explanation: `${item.ticker} dropped ${Math.abs(change).toFixed(1)}% today.`,
+          explanation: `${item.ticker} dropped ${Number.isFinite(change) ? Math.abs(change).toFixed(1) : "N/A"}% today.`,
           severity: "High",
           severityOrder: 1,
         });
@@ -479,7 +479,7 @@ export const Watchlist = () => {
         result.push({
           type: "HIGH RISK",
           ticker: item.ticker,
-          explanation: `${item.ticker} has a beta of ${item.beta.toFixed(2)}, indicating high volatility.`,
+          explanation: `${item.ticker} has a beta of ${Number.isFinite(item.beta) ? item.beta.toFixed(2) : "N/A"}, indicating high volatility.`,
           severity: "High",
           severityOrder: 1,
         });
@@ -488,7 +488,7 @@ export const Watchlist = () => {
         result.push({
           type: "VALUE OPPORTUNITY",
           ticker: item.ticker,
-          explanation: `${item.ticker} trades at P/E of ${item.pe_ratio.toFixed(1)} with positive earnings.`,
+          explanation: `${item.ticker} trades at P/E of ${Number.isFinite(item.pe_ratio) ? item.pe_ratio.toFixed(1) : "N/A"} with positive earnings.`,
           severity: "Medium",
           severityOrder: 2,
         });
@@ -497,7 +497,7 @@ export const Watchlist = () => {
         result.push({
           type: "INCOME PICK",
           ticker: item.ticker,
-          explanation: `${item.ticker} yields ${(item.dividend_yield * 100).toFixed(1)}% dividend.`,
+          explanation: `${item.ticker} yields ${Number.isFinite(item.dividend_yield) ? (item.dividend_yield * 100).toFixed(1) : "N/A"}% dividend.`,
           severity: "Low",
           severityOrder: 3,
         });
@@ -510,7 +510,7 @@ export const Watchlist = () => {
       result.push({
         type: "WATCHLIST UPDATE",
         ticker: tg.item.ticker,
-        explanation: `${tg.item.ticker} is the top gainer at +${tg.change.toFixed(1)}%.`,
+        explanation: `${tg.item.ticker} is the top gainer at +${Number.isFinite(tg.change) ? tg.change.toFixed(1) : "N/A"}%.`,
         severity: "Info",
         severityOrder: 4,
       });
@@ -519,7 +519,7 @@ export const Watchlist = () => {
       result.push({
         type: "WATCHLIST UPDATE",
         ticker: tl.item.ticker,
-        explanation: `${tl.item.ticker} is the top loser at ${tl.change.toFixed(1)}%.`,
+        explanation: `${tl.item.ticker} is the top loser at ${Number.isFinite(tl.change) ? tl.change.toFixed(1) : "N/A"}%.`,
         severity: "Info",
         severityOrder: 4,
       });
@@ -623,7 +623,7 @@ export const Watchlist = () => {
               <ArrowUpRight className="w-3.5 h-3.5" />
               Daily Change %
             </div>
-            {analytics.avgChange != null ? (
+            {analytics.avgChange != null && Number.isFinite(analytics.avgChange) ? (
               <span
                 className={`inline-flex items-center gap-1 font-black text-lg tabular-nums ${
                   analytics.avgChange >= 0 ? "text-emerald-400" : "text-red-400"
@@ -650,7 +650,7 @@ export const Watchlist = () => {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-white">{analytics.topGainer.item.ticker}</span>
                 <span className="text-xs font-bold text-emerald-400">
-                  +{analytics.topGainer.change.toFixed(2)}%
+                  +{Number.isFinite(analytics.topGainer.change) ? analytics.topGainer.change.toFixed(2) : "N/A"}%
                 </span>
               </div>
             ) : (
@@ -666,7 +666,7 @@ export const Watchlist = () => {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-white">{analytics.topLoser.item.ticker}</span>
                 <span className="text-xs font-bold text-red-400">
-                  {analytics.topLoser.change.toFixed(2)}%
+                  {Number.isFinite(analytics.topLoser.change) ? analytics.topLoser.change.toFixed(2) : "N/A"}%
                 </span>
               </div>
             ) : (
@@ -692,7 +692,7 @@ export const Watchlist = () => {
                         {s.sector}
                       </span>
                       <span className="text-gray-400 tabular-nums shrink-0 ml-2">
-                        {s.count} stock{s.count !== 1 ? "s" : ""} &middot; {pct.toFixed(1)}%
+                        {s.count} stock{s.count !== 1 ? "s" : ""} &middot; {Number.isFinite(pct) ? pct.toFixed(1) : "N/A"}%
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-[#242D3D]/60 rounded-full overflow-hidden">
@@ -868,7 +868,7 @@ export const Watchlist = () => {
                 </p>
                 <p className="text-lg font-black tabular-nums">
                   <span className={analytics.isConcentrated ? "text-amber-400" : "text-gray-300"}>
-                    {analytics.largestSectorPct.toFixed(0)}%
+                    {Number.isFinite(analytics.largestSectorPct) ? `${analytics.largestSectorPct.toFixed(0)}%` : "N/A"}
                   </span>
                 </p>
                 {analytics.isConcentrated && (
@@ -1047,7 +1047,7 @@ export const Watchlist = () => {
                             <ArrowDownRight className="w-3 h-3" />
                           )}
                           {isPositive ? "+" : ""}
-                          {change.toFixed(2)}%
+                          {Number.isFinite(change) ? change.toFixed(2) : "N/A"}%
                         </span>
                       ) : (
                         <span className="text-gray-500 text-xs font-medium">N/A</span>

@@ -50,7 +50,7 @@ export const computePerformanceReturns = (history) => {
 };
 
 export const formatReturn = (value) => {
-  if (value === null || value === undefined) return "N/A";
+  if (value == null || !Number.isFinite(value)) return "N/A";
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
 };

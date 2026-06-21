@@ -10,7 +10,7 @@ import { useWatchlist } from "../context/WatchlistContext";
 import { useAuth } from "../context/AuthContext";
 
 const formatMarketCap = (val) => {
-  if (!val) return "N/A";
+  if (!val || !Number.isFinite(val)) return "N/A";
   if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
   if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
   if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
@@ -314,7 +314,7 @@ export const StockDetail = ({ ticker }) => {
             <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-2 backdrop-blur-md min-h-[80px]">
               <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</span>
               <p className="text-sm font-black text-white mt-0.5 tabular-nums">
-                {overview.current_price ? `$${overview.current_price.toFixed(2)}` : "N/A"}
+                {overview.current_price != null && Number.isFinite(overview.current_price) ? `$${overview.current_price.toFixed(2)}` : "N/A"}
               </p>
             </div>
 
@@ -329,7 +329,7 @@ export const StockDetail = ({ ticker }) => {
                     : "text-gray-400"
                 }`}
               >
-                {dailyChange !== null ? `${dailyChange >= 0 ? "+" : ""}${dailyChange.toFixed(2)}%` : "N/A"}
+                {dailyChange !== null && Number.isFinite(dailyChange) ? `${dailyChange >= 0 ? "+" : ""}${dailyChange.toFixed(2)}%` : "N/A"}
               </p>
             </div>
 
@@ -343,7 +343,7 @@ export const StockDetail = ({ ticker }) => {
             <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-2 backdrop-blur-md min-h-[80px]">
               <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">P/E</span>
               <p className="text-sm font-black text-white mt-0.5 tabular-nums">
-                {overview.pe_ratio ? overview.pe_ratio.toFixed(2) : "N/A"}
+                {overview.pe_ratio != null && Number.isFinite(overview.pe_ratio) ? overview.pe_ratio.toFixed(2) : "N/A"}
               </p>
             </div>
 
@@ -368,7 +368,7 @@ export const StockDetail = ({ ticker }) => {
                           {label}
                         </span>
                         <span className="text-[10px] text-gray-400 tabular-nums">
-                          {score > 0 ? "+" : ""}{score.toFixed(2)}
+                          {Number.isFinite(score) ? `${score > 0 ? "+" : ""}${score.toFixed(2)}` : "N/A"}
                         </span>
                       </>
                     );
@@ -720,24 +720,24 @@ export const StockDetail = ({ ticker }) => {
                     },
                     {
                       label: "Revenue Estimate",
-                      value: earnings.revenue_estimate != null
+                      value: earnings.revenue_estimate != null && Number.isFinite(earnings.revenue_estimate)
                         ? `$${(earnings.revenue_estimate / 1e9).toFixed(2)}B`
                         : "N/A",
                       sub: null,
                     },
                     {
                       label: "EPS Estimate",
-                      value: earnings.eps_estimate != null ? `$${earnings.eps_estimate.toFixed(2)}` : "N/A",
+                      value: earnings.eps_estimate != null && Number.isFinite(earnings.eps_estimate) ? `$${earnings.eps_estimate.toFixed(2)}` : "N/A",
                       sub: null,
                     },
                     {
                       label: "Previous EPS",
-                      value: earnings.previous_eps != null ? `$${earnings.previous_eps.toFixed(2)}` : "N/A",
+                      value: earnings.previous_eps != null && Number.isFinite(earnings.previous_eps) ? `$${earnings.previous_eps.toFixed(2)}` : "N/A",
                       sub: null,
                     },
                     {
                       label: "Earnings Surprise",
-                      value: earnings.earnings_surprise != null
+                      value: earnings.earnings_surprise != null && Number.isFinite(earnings.earnings_surprise)
                         ? `${earnings.earnings_surprise >= 0 ? "+" : ""}${earnings.earnings_surprise.toFixed(2)}`
                         : "N/A",
                       sub: null,

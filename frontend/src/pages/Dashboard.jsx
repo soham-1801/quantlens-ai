@@ -193,7 +193,7 @@ export const Dashboard = () => {
         ) : sortedWatchlist.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {sortedWatchlist.map((item) => {
-              const isPositive = item.price_change_percent >= 0;
+              const isPositive = item.price_change_percent != null && Number.isFinite(item.price_change_percent) && item.price_change_percent >= 0;
               return (
                 <div
                   key={item.id}
@@ -256,7 +256,7 @@ export const Dashboard = () => {
                       <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
                         Change (%)
                       </p>
-                      {item.price_change_percent !== null && item.price_change_percent !== undefined ? (
+                      {item.price_change_percent != null && Number.isFinite(item.price_change_percent) ? (
                         <span
                           className={`inline-flex items-center gap-1 font-bold text-xs mt-1 px-2.5 py-0.5 rounded-xl ${
                             isPositive ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"
@@ -264,7 +264,7 @@ export const Dashboard = () => {
                         >
                           {isPositive ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                           {isPositive ? "+" : ""}
-                          {item.price_change_percent.toFixed(2)}%
+                          {Number.isFinite(item.price_change_percent) ? `${item.price_change_percent >= 0 ? "+" : ""}${item.price_change_percent.toFixed(2)}` : "N/A"}%
                         </span>
                       ) : (
                         <span className="text-gray-500 font-semibold text-xs mt-1 inline-block">N/A</span>
