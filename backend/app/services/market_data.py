@@ -1,4 +1,5 @@
 import yfinance as yf
+from yfinance.exceptions import YFRateLimitError
 import requests
 import re
 import logging
@@ -921,6 +922,12 @@ class MarketDataService:
             MarketDataService._news_cache[ticker_upper] = articles
             logger.info("CACHE_STORE news %s", ticker_upper)
             return articles
+        except YFRateLimitError:
+            logger.warning("NEWS_RATE_LIMIT ticker=%s", ticker_upper)
+            if ticker_upper in MarketDataService._news_cache:
+                logger.info("NEWS_CACHE_FALLBACK ticker=%s", ticker_upper)
+                return MarketDataService._news_cache[ticker_upper]
+            return []
         except Exception as e:
             logger.error("Error fetching news for %s: %s", ticker_upper, e, exc_info=True)
             return []
