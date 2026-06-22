@@ -479,6 +479,34 @@ class MarketDataService:
         return None, None
 
     @staticmethod
+    def _fetch_yahoo_quote_summary(ticker: str) -> dict:
+        """Fetch fundamentals from Yahoo v10 quoteSummary using crumb-based auth (no yfinance.info)."""
+        try:
+            sess = requests.Session()
+            sess.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+            sess.get("https://fc.yahoo.com", timeout=10)
+            crumb_resp = sess.get(
+                "https://query2.finance.yahoo.com/v1/test/getcrumb",
+                timeout=10,
+            )
+            if crumb_resp.status_code != 200 or "<html>" in crumb_resp.text:
+                return {}
+            crumb = crumb_resp.text.strip()
+            url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
+            params = {
+                "modules": "assetProfile,financialData,defaultKeyStatistics,summaryDetail",
+                "crumb": crumb,
+            }
+            resp = sess.get(url, params=params, timeout=15)
+            if resp.status_code != 200:
+                return {}
+            data = resp.json()
+            result = data.get("quoteSummary", {}).get("result", [{}])[0]
+            return result
+        except Exception:
+            return {}
+
+    @staticmethod
     def get_stock_overview(ticker: str) -> Optional[StockOverview]:
         ticker_upper = ticker.upper().strip()
         now = datetime.now()
@@ -502,9 +530,7 @@ class MarketDataService:
                         overview.industry = industry
                 except Exception:
                     pass
-            if (overview.market_cap is None or overview.pe_ratio is None or
-                overview.eps is None or overview.website is None or
-                overview.volume is None):
+            if overview.volume is None or overview.market_cap is None:
                 try:
                     yf_ticker = yf.Ticker(ticker_upper)
                     fi = yf_ticker.fast_info
@@ -517,52 +543,37 @@ class MarketDataService:
                         mc = safe_int(fi_dict.get("marketCap"))
                         if mc is not None:
                             overview.market_cap = mc
-                    try:
-                        info = yf_ticker.info
-                    except Exception:
-                        logger.exception(
-                            "YF_INFO_FETCH_FAILED ticker=%s",
-                            ticker_upper,
-                        )
-                        raise
-                    logger.warning(
-                        "YF_INFO_TYPE=%s",
-                        type(info)
-                    )
-                    logger.warning(
-                        "YF_INFO_IS_DICT=%s",
-                        isinstance(info, dict)
-                    )
-                    logger.warning(
-                        "YF_INFO_LEN=%s",
-                        len(info) if hasattr(info, "__len__") else "NO_LEN"
-                    )
-                    logger.warning(
-                        "YF_INFO_SAMPLE_KEYS=%s",
-                        list(info.keys())[:20] if hasattr(info, "keys") else "NO_KEYS"
-                    )
-                    for k in ("marketCap", "trailingPE", "forwardPE", "trailingEps", "forwardEps", "website"):
-                        logger.warning("YF_INFO_FIELD %s ticker=%s value=%s", k, ticker_upper, info.get(k))
-                    if isinstance(info, dict):
+                except Exception:
+                    pass
+            if (overview.pe_ratio is None or overview.eps is None or
+                overview.website is None or overview.sector is None or
+                overview.industry is None):
+                try:
+                    qs = MarketDataService._fetch_yahoo_quote_summary(ticker_upper)
+                    if qs:
+                        sd = qs.get("summaryDetail", {})
+                        dks = qs.get("defaultKeyStatistics", {})
+                        ap = qs.get("assetProfile", {})
                         if overview.pe_ratio is None:
-                            pe = safe_float(info.get("trailingPE") or info.get("forwardPE"))
+                            pe = safe_float(sd.get("trailingPE", {}).get("raw"))
                             if pe is not None:
                                 overview.pe_ratio = pe
                         if overview.eps is None:
-                            eps = safe_float(info.get("trailingEps") or info.get("forwardEps"))
+                            eps = safe_float(dks.get("trailingEps", {}).get("raw"))
                             if eps is not None:
                                 overview.eps = eps
                         if overview.website is None:
-                            overview.website = info.get("website") or overview.website
+                            overview.website = ap.get("website") or overview.website
+                        if overview.sector is None:
+                            overview.sector = ap.get("sector") or overview.sector
+                        if overview.industry is None:
+                            overview.industry = ap.get("industry") or overview.industry
                         if overview.market_cap is None:
-                            mc2 = safe_int(info.get("marketCap"))
-                            if mc2 is not None:
-                                overview.market_cap = mc2
-                except Exception as e:
-                    logger.exception(
-                        "YFINANCE_BACKFILL_FAILED ticker=%s",
-                        ticker_upper,
-                    )
+                            mc = safe_int(sd.get("marketCap", {}).get("raw"))
+                            if mc is not None:
+                                overview.market_cap = mc
+                except Exception:
+                    pass
             logger.warning(
                 "OVERVIEW_TRACE %s",
                 {
