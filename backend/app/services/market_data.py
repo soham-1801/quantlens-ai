@@ -484,11 +484,13 @@ class MarketDataService:
         try:
             sess = requests.Session()
             sess.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-            sess.get("https://fc.yahoo.com", timeout=10)
+            fc_resp = sess.get("https://fc.yahoo.com", timeout=10)
+            logger.warning("QS_TRACE ticker=%s fc_status=%s", ticker, fc_resp.status_code)
             crumb_resp = sess.get(
                 "https://query2.finance.yahoo.com/v1/test/getcrumb",
                 timeout=10,
             )
+            logger.warning("QS_TRACE ticker=%s crumb_status=%s crumb_len=%s", ticker, crumb_resp.status_code, len(crumb_resp.text))
             if crumb_resp.status_code != 200 or "<html>" in crumb_resp.text:
                 return {}
             crumb = crumb_resp.text.strip()
@@ -498,12 +500,15 @@ class MarketDataService:
                 "crumb": crumb,
             }
             resp = sess.get(url, params=params, timeout=15)
+            logger.warning("QS_TRACE ticker=%s qs_status=%s", ticker, resp.status_code)
             if resp.status_code != 200:
                 return {}
             data = resp.json()
             result = data.get("quoteSummary", {}).get("result", [{}])[0]
+            logger.warning("QS_TRACE ticker=%s modules=%s", ticker, list(result.keys()))
             return result
-        except Exception:
+        except Exception as e:
+            logger.exception("QS_TRACE ticker=%s exception=%s", ticker, e)
             return {}
 
     @staticmethod
