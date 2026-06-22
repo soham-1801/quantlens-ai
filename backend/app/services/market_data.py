@@ -9,6 +9,14 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+try:
+    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+    _vader = SentimentIntensityAnalyzer()
+    _HAS_VADER = True
+except ImportError:
+    _HAS_VADER = False
+    _vader = None
+
 YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json",
@@ -881,11 +889,33 @@ class MarketDataService:
                             pass
                 
                 if title and link and published_at:
+                    text = title
+                    summary = content.get("summary")
+                    if summary:
+                        text = title + " " + summary
+                    sentiment_label = None
+                    sentiment_score = None
+                    if _HAS_VADER and text:
+                        scores = _vader.polarity_scores(text)
+                        compound = scores["compound"]
+                        if compound >= 0.05:
+                            sentiment_label = "Positive"
+                        elif compound <= -0.05:
+                            sentiment_label = "Negative"
+                        else:
+                            sentiment_label = "Neutral"
+                        sentiment_score = round(compound, 2)
+                        logger.info(
+                            "NEWS_SENTIMENT ticker=%s score=%s label=%s",
+                            ticker_upper, sentiment_score, sentiment_label,
+                        )
                     articles.append(StockNewsArticle(
                         title=title,
                         publisher=publisher,
                         link=link,
-                        published_at=published_at
+                        published_at=published_at,
+                        sentiment_label=sentiment_label,
+                        sentiment_score=sentiment_score,
                     ))
             
             logger.info("Fetched %d news articles for %s", len(articles), ticker_upper)
