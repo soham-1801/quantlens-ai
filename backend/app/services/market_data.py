@@ -479,39 +479,6 @@ class MarketDataService:
         return None, None
 
     @staticmethod
-    def _fetch_yahoo_quote_summary(ticker: str) -> dict:
-        """Fetch fundamentals from Yahoo v10 quoteSummary using crumb-based auth (no yfinance.info)."""
-        try:
-            sess = requests.Session()
-            sess.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-            fc_resp = sess.get("https://fc.yahoo.com", timeout=10)
-            logger.warning("QS_TRACE ticker=%s fc_status=%s", ticker, fc_resp.status_code)
-            crumb_resp = sess.get(
-                "https://query2.finance.yahoo.com/v1/test/getcrumb",
-                timeout=10,
-            )
-            logger.warning("QS_TRACE ticker=%s crumb_status=%s crumb_len=%s", ticker, crumb_resp.status_code, len(crumb_resp.text))
-            if crumb_resp.status_code != 200 or "<html>" in crumb_resp.text:
-                return {}
-            crumb = crumb_resp.text.strip()
-            url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
-            params = {
-                "modules": "assetProfile,financialData,defaultKeyStatistics,summaryDetail",
-                "crumb": crumb,
-            }
-            resp = sess.get(url, params=params, timeout=15)
-            logger.warning("QS_TRACE ticker=%s qs_status=%s", ticker, resp.status_code)
-            if resp.status_code != 200:
-                return {}
-            data = resp.json()
-            result = data.get("quoteSummary", {}).get("result", [{}])[0]
-            logger.warning("QS_TRACE ticker=%s modules=%s", ticker, list(result.keys()))
-            return result
-        except Exception as e:
-            logger.exception("QS_TRACE ticker=%s exception=%s", ticker, e)
-            return {}
-
-    @staticmethod
     def get_stock_overview(ticker: str) -> Optional[StockOverview]:
         ticker_upper = ticker.upper().strip()
         now = datetime.now()
@@ -575,63 +542,101 @@ class MarketDataService:
             except Exception:
                 pass
 
-        # Universal backfill: PE/EPS from Finnhub /stock/earnings
-        # Sum trailing 4 quarters' actual EPS, compute PE = price / trailing_eps
-        # This endpoint does NOT require Yahoo crumb and works on Render
-        if overview.pe_ratio is None or overview.eps is None:
+        # Universal backfill: PE/EPS/website from Finnhub (no Yahoo dependency)
+        if overview.pe_ratio is None or overview.eps is None or overview.website is None:
             try:
                 api_key = settings.FINNHUB_API_KEY
-                if api_key:
-                    url = f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker_upper}&token={api_key}"
-                    resp = requests.get(url, timeout=10)
-                    if resp.status_code == 200:
-                        earnings_data = resp.json()
-                        if isinstance(earnings_data, list) and len(earnings_data) >= 4:
-                            trailing_eps = 0
-                            count = 0
-                            for er in earnings_data:
-                                actual = safe_float(er.get("actual"))
-                                if actual is not None:
-                                    trailing_eps += actual
-                                    count += 1
-                                    if count >= 4:
-                                        break
-                            if count == 4 and trailing_eps > 0:
-                                if overview.eps is None:
-                                    overview.eps = round(trailing_eps, 2)
-                                if overview.pe_ratio is None and overview.current_price and overview.current_price > 0:
-                                    overview.pe_ratio = round(overview.current_price / trailing_eps, 2)
-            except Exception:
-                pass
+                if not api_key:
+                    pass
+                else:
+                    # Step 1: Finnhub metric endpoint (peTTM, epsTTM)
+                    if overview.pe_ratio is None or overview.eps is None:
+                        url = f"https://finnhub.io/api/v1/stock/metric?symbol={ticker_upper}&metric=all&token={api_key}"
+                        resp = requests.get(url, timeout=10)
+                        if resp.status_code == 200:
+                            metric = resp.json().get("metric", {})
+                            pe = safe_float(metric.get("peTTM") or metric.get("peNormalizedAnnual"))
+                            eps = safe_float(metric.get("epsTTM") or metric.get("epsBasicExclExtraTTM"))
+                            if pe is not None and overview.pe_ratio is None:
+                                overview.pe_ratio = pe
+                            if eps is not None and overview.eps is None:
+                                overview.eps = eps
+                            logger.warning(
+                                "FUNDAMENTAL_SOURCE=finnhub_metric ticker=%s PE_COMPUTED=%s EPS_COMPUTED=%s",
+                                ticker_upper, pe, eps,
+                            )
 
-        # Universal backfill: PE/EPS/website/sector/industry from quoteSummary (fallback)
-        if (overview.pe_ratio is None or overview.eps is None or
-            overview.website is None or overview.sector is None or
-            overview.industry is None):
-            try:
-                qs = MarketDataService._fetch_yahoo_quote_summary(ticker_upper)
-                if qs:
-                    sd = qs.get("summaryDetail", {})
-                    dks = qs.get("defaultKeyStatistics", {})
-                    ap = qs.get("assetProfile", {})
-                    if overview.pe_ratio is None:
-                        pe = safe_float(sd.get("trailingPE", {}).get("raw"))
-                        if pe is not None:
-                            overview.pe_ratio = pe
-                    if overview.eps is None:
-                        eps = safe_float(dks.get("trailingEps", {}).get("raw"))
-                        if eps is not None:
-                            overview.eps = eps
+                    # Step 2: Finnhub earnings endpoint (trailing EPS, compute PE from price)
+                    if overview.pe_ratio is None or overview.eps is None:
+                        url = f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker_upper}&token={api_key}"
+                        resp = requests.get(url, timeout=10)
+                        if resp.status_code == 200:
+                            earnings_data = resp.json()
+                            if isinstance(earnings_data, list) and len(earnings_data) > 0:
+                                earnings_data = sorted(
+                                    earnings_data,
+                                    key=lambda x: x.get("period", ""),
+                                    reverse=True,
+                                )
+                                logger.info(
+                                    "EARNINGS_BACKFILL ticker=%s periods=%s actuals=%s",
+                                    ticker_upper,
+                                    [e.get("period") for e in earnings_data[:4]],
+                                    [safe_float(e.get("actual")) for e in earnings_data[:4]],
+                                )
+                                valid_eps = []
+                                for er in earnings_data:
+                                    actual = safe_float(er.get("actual"))
+                                    if actual is not None:
+                                        valid_eps.append(actual)
+                                    if len(valid_eps) >= 4:
+                                        break
+                                trailing_eps = sum(valid_eps)
+                                count = len(valid_eps)
+                                if count >= 4:
+                                    eps_val = round(trailing_eps, 2)
+                                elif count > 0:
+                                    eps_val = round((trailing_eps / count) * 4, 2)
+                                else:
+                                    eps_val = None
+                                if eps_val is not None and overview.eps is None:
+                                    overview.eps = eps_val
+                                if (
+                                    eps_val is not None
+                                    and overview.current_price
+                                    and overview.current_price > 0
+                                ):
+                                    overview.pe_ratio = round(
+                                        overview.current_price / eps_val,
+                                        2,
+                                    )
+                                logger.info(
+                                    "PE_COMPUTED ticker=%s eps=%s pe=%s",
+                                    ticker_upper,
+                                    eps_val,
+                                    overview.pe_ratio,
+                                )
+                                logger.warning(
+                                    "FUNDAMENTAL_SOURCE=finnhub_earnings ticker=%s quarters=%s EPS_COMPUTED=%s PE_COMPUTED=%s",
+                                    ticker_upper,
+                                    count,
+                                    eps_val,
+                                    overview.pe_ratio,
+                                )
+
+                    # Step 3: Finnhub profile2 for website
                     if overview.website is None:
-                        overview.website = ap.get("website") or overview.website
-                    if overview.sector is None:
-                        overview.sector = ap.get("sector") or overview.sector
-                    if overview.industry is None:
-                        overview.industry = ap.get("industry") or overview.industry
-                    if overview.market_cap is None:
-                        mc = safe_int(sd.get("marketCap", {}).get("raw"))
-                        if mc is not None:
-                            overview.market_cap = mc
+                        url = f"https://finnhub.io/api/v1/stock/profile2?symbol={ticker_upper}&token={api_key}"
+                        resp = requests.get(url, timeout=10)
+                        if resp.status_code == 200:
+                            profile = resp.json()
+                            overview.website = profile.get("weburl") or overview.website
+                            if overview.industry is None:
+                                overview.industry = profile.get("finnhubIndustry") or overview.industry
+                            logger.warning(
+                                "FUNDAMENTAL_SOURCE=finnhub_profile ticker=%s website=%s industry=%s",
+                                ticker_upper, overview.website, overview.industry,
+                            )
             except Exception:
                 pass
 
