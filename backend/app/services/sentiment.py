@@ -2,35 +2,7 @@ import re
 from typing import List, Dict, Any, Tuple
 from app.schemas.stock import StockNewsArticle
 
-# Try to import PyTorch and Transformers for FinBERT
-try:
-    import torch
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
-    HAS_TRANSFORMERS = True
-except ImportError:
-    HAS_TRANSFORMERS = False
-
 class SentimentService:
-    _pipeline = None
-    _load_failed = False
-
-    @classmethod
-    def _get_finbert_pipeline(cls):
-        if not HAS_TRANSFORMERS or cls._load_failed:
-            return None
-        
-        if cls._pipeline is None:
-            try:
-                print("Attempting to load FinBERT model (ProsusDE/finbert)...")
-                tokenizer = AutoTokenizer.from_pretrained("ProsusDE/finbert")
-                model = AutoModelForSequenceClassification.from_pretrained("ProsusDE/finbert")
-                cls._pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
-                print("FinBERT model loaded successfully.")
-            except Exception as e:
-                print(f"Failed to load FinBERT model: {e}. Falling back to rule-based NLP analyzer.")
-                cls._load_failed = True
-                
-        return cls._pipeline
 
     @staticmethod
     def analyze_headline_fallback(headline: str) -> Tuple[str, float]:
@@ -81,33 +53,6 @@ class SentimentService:
 
     @classmethod
     def analyze_headline(cls, headline: str) -> Tuple[str, float]:
-        """
-        Runs sentiment analysis on a news headline.
-        Tries to use FinBERT; automatically falls back to rule-based model if unavailable/fails.
-        Returns Tuple of (label, score) in range [-1.0, 1.0].
-        """
-        nlp = cls._get_finbert_pipeline()
-        
-        if nlp is not None:
-            try:
-                # FinBERT outputs: [{'label': 'positive', 'score': 0.95}]
-                result = nlp(headline)[0]
-                label = result["label"].lower()  # 'positive', 'neutral', 'negative'
-                confidence = result["score"]
-                
-                # FinBERT confidence is close to 1.0. We map it to [-1.0, 1.0] range
-                if label == "positive":
-                    score = confidence
-                elif label == "negative":
-                    score = -confidence
-                else:
-                    score = 0.0
-                    
-                return label, round(score, 4)
-            except Exception as e:
-                print(f"FinBERT pipeline run error: {e}. Falling back to rule-based analyzer.")
-                # Fall through to fallback
-        
         return cls.analyze_headline_fallback(headline)
 
     @classmethod

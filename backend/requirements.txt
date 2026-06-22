@@ -12,6 +12,5 @@ alembic>=1.13.1
 email-validator>=2.0.0
 yfinance>=0.2.38
 cachetools>=5.3.3
-transformers>=4.40.0
-torch>=2.2.0
+vaderSentiment>=3.3.2
 
