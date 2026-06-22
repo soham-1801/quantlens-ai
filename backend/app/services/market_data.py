@@ -517,15 +517,33 @@ class MarketDataService:
                         mc = safe_int(fi_dict.get("marketCap"))
                         if mc is not None:
                             overview.market_cap = mc
-                    info = yf_ticker.info
-                    if isinstance(info, dict):
-                        logger.warning(
-                            "INFO_KEYS %s ticker=%s",
-                            list(info.keys())[:50],
+                    try:
+                        info = yf_ticker.info
+                    except Exception:
+                        logger.exception(
+                            "YF_INFO_FETCH_FAILED ticker=%s",
                             ticker_upper,
                         )
-                        for k in ("marketCap", "trailingPE", "forwardPE", "trailingEps", "forwardEps", "website"):
-                            logger.warning("INFO_FIELD %s ticker=%s value=%s", k, ticker_upper, info.get(k))
+                        raise
+                    logger.warning(
+                        "YF_INFO_TYPE=%s",
+                        type(info)
+                    )
+                    logger.warning(
+                        "YF_INFO_IS_DICT=%s",
+                        isinstance(info, dict)
+                    )
+                    logger.warning(
+                        "YF_INFO_LEN=%s",
+                        len(info) if hasattr(info, "__len__") else "NO_LEN"
+                    )
+                    logger.warning(
+                        "YF_INFO_SAMPLE_KEYS=%s",
+                        list(info.keys())[:20] if hasattr(info, "keys") else "NO_KEYS"
+                    )
+                    for k in ("marketCap", "trailingPE", "forwardPE", "trailingEps", "forwardEps", "website"):
+                        logger.warning("YF_INFO_FIELD %s ticker=%s value=%s", k, ticker_upper, info.get(k))
+                    if isinstance(info, dict):
                         if overview.pe_ratio is None:
                             pe = safe_float(info.get("trailingPE") or info.get("forwardPE"))
                             if pe is not None:
