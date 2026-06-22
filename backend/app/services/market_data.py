@@ -502,6 +502,14 @@ class MarketDataService:
                         overview.industry = industry
                 except Exception:
                     pass
+            if overview.volume is None:
+                try:
+                    raw = yf.Ticker(ticker_upper).fast_info
+                    vol = safe_int(getattr(raw, "last_volume", None))
+                    if vol is not None:
+                        overview.volume = vol
+                except Exception:
+                    pass
             logger.info("VOLUME_TRACE [%s] TIER=Finnhub volume=%s", ticker, overview.volume)
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
