@@ -463,6 +463,22 @@ class MarketDataService:
             return None
 
     @staticmethod
+    def _sector_from_yahoo_search(ticker: str) -> tuple:
+        """Fetch sector/industry from Yahoo search API (no crumb required, works from cloud IPs)."""
+        try:
+            url = f"https://query2.finance.yahoo.com/v1/finance/search?q={ticker}&quotesCount=1&newsCount=0"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                quotes = data.get("quotes", [])
+                if quotes:
+                    return quotes[0].get("sector"), quotes[0].get("industry")
+        except Exception:
+            pass
+        return None, None
+
+    @staticmethod
     def get_stock_overview(ticker: str) -> Optional[StockOverview]:
         ticker_upper = ticker.upper().strip()
         now = datetime.now()
@@ -476,6 +492,16 @@ class MarketDataService:
         # Tier 1: Finnhub (requires FINNHUB_API_KEY env var, works from any cloud IP)
         overview = MarketDataService._build_from_finnhub(ticker_upper)
         if overview and overview.current_price is not None:
+            # Finnhub does not provide GICS sector/industry — backfill from Yahoo search API (no crumb needed)
+            if overview.sector is None or overview.industry is None:
+                try:
+                    sector, industry = MarketDataService._sector_from_yahoo_search(ticker_upper)
+                    if sector:
+                        overview.sector = sector
+                    if industry:
+                        overview.industry = industry
+                except Exception:
+                    pass
             logger.info("VOLUME_TRACE [%s] TIER=Finnhub volume=%s", ticker, overview.volume)
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
