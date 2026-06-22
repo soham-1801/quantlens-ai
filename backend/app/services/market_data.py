@@ -342,7 +342,17 @@ class MarketDataService:
                     "marketCap": safe_int(getattr(raw, "marketCap", None)),
                     "avgVolume": safe_int(coalesce(getattr(raw, "averageVolume", None), getattr(raw, "averageDailyVolume10Day", None))),
                 }
-            except Exception:
+                import json as _json
+                logger.info("YFINANCE_TRACE [%s] fast_info keys=%s fi_volume=%s fi_avg_volume=%s last_volume_attr=%s regularMarketVolume_attr=%s",
+                    ticker,
+                    list(raw.keys()) if hasattr(raw, "keys") else "N/A",
+                    fi.get("volume"),
+                    fi.get("avgVolume"),
+                    safe_int(getattr(raw, "last_volume", None)),
+                    safe_int(getattr(raw, "regularMarketVolume", None)),
+                )
+            except Exception as e:
+                logger.warning("YFINANCE_TRACE [%s] fast_info exception: %s", ticker, e)
                 fi = {}
 
             hist = {}
@@ -357,9 +367,11 @@ class MarketDataService:
                         "open": safe_float(last.get("Open")),
                         "volume": safe_int(last.get("Volume")),
                     }
+                    logger.info("YFINANCE_TRACE [%s] history volume=%s", ticker, hist.get("volume"))
                     if len(df) >= 2:
                         hist["previousClose"] = safe_float(df.iloc[-2].get("Close"))
-            except Exception:
+            except Exception as e:
+                logger.warning("YFINANCE_TRACE [%s] history exception: %s", ticker, e)
                 hist = {}
 
             info = {}
@@ -367,7 +379,10 @@ class MarketDataService:
                 raw_info = ticker_obj.info
                 if isinstance(raw_info, dict):
                     info = raw_info
-            except Exception:
+                    logger.info("YFINANCE_TRACE [%s] info volume=%s info regularMarketVolume=%s",
+                        ticker, info.get("volume"), info.get("regularMarketVolume"))
+            except Exception as e:
+                logger.warning("YFINANCE_TRACE [%s] info exception: %s", ticker, e)
                 info = {}
 
             def first(*values):
@@ -426,6 +441,12 @@ class MarketDataService:
                 ),
             )
 
+            log_vol = result.volume if result else None
+            logger.info("YFINANCE_TRACE [%s] final volume=%s fi_vol=%s hist_vol=%s info_vol=%s info_rmv=%s",
+                ticker, log_vol,
+                fi.get("volume"), hist.get("volume"),
+                info.get("volume"), info.get("regularMarketVolume"))
+
             MarketDataService._last_debug[ticker] = {
                 "source": "yfinance",
                 "fi_keys": [k for k, v in fi.items() if v is not None],
@@ -455,21 +476,25 @@ class MarketDataService:
         # Tier 1: Finnhub (requires FINNHUB_API_KEY env var, works from any cloud IP)
         overview = MarketDataService._build_from_finnhub(ticker_upper)
         if overview and overview.current_price is not None:
+            logger.info("VOLUME_TRACE [%s] TIER=Finnhub volume=%s", ticker, overview.volume)
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
 
         # Tier 2: Direct Yahoo HTTP call (bypasses yfinance library, uses Chrome UA)
         overview = MarketDataService._build_from_yahoo_direct(ticker_upper)
         if overview and overview.current_price is not None:
+            logger.info("VOLUME_TRACE [%s] TIER=YahooDirect volume=%s", ticker, overview.volume)
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
 
         # Tier 3: yfinance fallback (may be rate-limited on cloud IPs)
         overview = MarketDataService._build_from_yfinance(ticker_upper)
         if overview and overview.current_price is not None:
+            logger.info("VOLUME_TRACE [%s] TIER=yfinance volume=%s", ticker, overview.volume)
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
 
+        logger.warning("VOLUME_TRACE [%s] ALL TIERS FAILED", ticker)
         return None
 
     @staticmethod
