@@ -55,6 +55,7 @@ class MarketDataService:
     _history_cache = TTLCache(maxsize=1000, ttl=900)
     _news_cache = TTLCache(maxsize=1000, ttl=900)
     _earnings_cache = TTLCache(maxsize=1000, ttl=900)
+    _technical_cache = TTLCache(maxsize=1000, ttl=900)
     _last_debug = {}      # ticker_upper: dict of debug info from last call
 
     @staticmethod
@@ -1156,4 +1157,107 @@ class MarketDataService:
             return None
         except Exception:
             logger.exception("yfinance earnings request failed for %s", ticker)
+            return None
+
+    @staticmethod
+    def get_stock_technical(ticker: str) -> Optional[Dict[str, Any]]:
+        ticker_upper = ticker.upper().strip()
+
+        if ticker_upper in MarketDataService._technical_cache:
+            logger.info("CACHE_HIT technical %s", ticker_upper)
+            return MarketDataService._technical_cache[ticker_upper]
+
+        try:
+            import pandas as pd
+            import numpy as np
+
+            ticker_obj = yf.Ticker(ticker_upper)
+            df = ticker_obj.history(period="1y")
+            if df.empty or len(df) < 50:
+                logger.warning("Insufficient history for technicals on %s", ticker_upper)
+                return None
+
+            close = df["Close"].astype(float)
+            high = df["High"].astype(float)
+            low = df["Low"].astype(float)
+
+            current_price = safe_float(close.iloc[-1])
+
+            # RSI(14)
+            delta = close.diff()
+            gain = delta.where(delta > 0, 0.0)
+            loss = (-delta.where(delta < 0, 0.0))
+            avg_gain = gain.rolling(14).mean()
+            avg_loss = loss.rolling(14).mean()
+            rs = avg_gain / avg_loss.replace(0, np.nan)
+            rsi = 100 - (100 / (1 + rs))
+            rsi_val = safe_float(rsi.iloc[-1])
+
+            # EMA20, EMA50
+            ema20 = safe_float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+            ema50 = safe_float(close.ewm(span=50, adjust=False).mean().iloc[-1])
+
+            # SMA200
+            sma200_val = None
+            if len(df) >= 200:
+                sma200_val = safe_float(close.rolling(200).mean().iloc[-1])
+
+            # MACD (12,26,9)
+            ema12 = close.ewm(span=12, adjust=False).mean()
+            ema26 = close.ewm(span=26, adjust=False).mean()
+            macd_line = ema12 - ema26
+            signal_line = macd_line.ewm(span=9, adjust=False).mean()
+            histogram = macd_line - signal_line
+            macd_val = safe_float(macd_line.iloc[-1])
+            signal_val = safe_float(signal_line.iloc[-1])
+            hist_val = safe_float(histogram.iloc[-1])
+
+            # Bollinger Bands (20,2)
+            sma20 = close.rolling(20).mean()
+            std20 = close.rolling(20).std()
+            bb_upper = safe_float((sma20 + 2 * std20).iloc[-1])
+            bb_middle = safe_float(sma20.iloc[-1])
+            bb_lower = safe_float((sma20 - 2 * std20).iloc[-1])
+
+            # ATR(14)
+            prev_close = close.shift(1)
+            tr = pd.concat([
+                high - low,
+                (high - prev_close).abs(),
+                (low - prev_close).abs(),
+            ], axis=1).max(axis=1)
+            atr_val = safe_float(tr.rolling(14).mean().iloc[-1])
+
+            result = {
+                "ticker": ticker_upper,
+                "current_price": current_price,
+                "rsi": rsi_val,
+                "ema20": ema20,
+                "ema50": ema50,
+                "sma200": sma200_val,
+                "macd": {
+                    "macd": macd_val,
+                    "signal": signal_val,
+                    "histogram": hist_val,
+                },
+                "bollinger": {
+                    "upper": bb_upper,
+                    "middle": bb_middle,
+                    "lower": bb_lower,
+                },
+                "atr": atr_val,
+            }
+
+            MarketDataService._technical_cache[ticker_upper] = result
+            logger.info("CACHE_STORE technical %s", ticker_upper)
+            return result
+
+        except YFRateLimitError:
+            logger.warning("TECHNICAL_RATE_LIMIT ticker=%s", ticker_upper)
+            if ticker_upper in MarketDataService._technical_cache:
+                logger.info("TECHNICAL_CACHE_FALLBACK ticker=%s", ticker_upper)
+                return MarketDataService._technical_cache[ticker_upper]
+            return None
+        except Exception as e:
+            logger.error("Error computing technicals for %s: %s", ticker_upper, e)
             return None

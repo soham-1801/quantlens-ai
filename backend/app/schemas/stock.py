@@ -71,3 +71,27 @@ class EarningsSummary(BaseModel):
     previous_eps: Optional[float] = None
     earnings_surprise: Optional[float] = None
     message: Optional[str] = None
+
+
+class MACDData(BaseModel):
+    macd: Optional[float] = None
+    signal: Optional[float] = None
+    histogram: Optional[float] = None
+
+
+class BollingerBands(BaseModel):
+    upper: Optional[float] = None
+    middle: Optional[float] = None
+    lower: Optional[float] = None
+
+
+class TechnicalIndicators(BaseModel):
+    ticker: str
+    current_price: Optional[float] = None
+    rsi: Optional[float] = None
+    ema20: Optional[float] = None
+    ema50: Optional[float] = None
+    sma200: Optional[float] = None
+    macd: MACDData = MACDData()
+    bollinger: BollingerBands = BollingerBands()
+    atr: Optional[float] = None
