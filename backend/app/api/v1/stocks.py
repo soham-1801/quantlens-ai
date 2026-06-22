@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List
 from app.services.market_data import MarketDataService
-from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
+from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle, TechnicalIndicators
 from app.api.v1.auth import get_current_user  # Dependency protection
 from app.models.user import User
 
@@ -49,3 +49,14 @@ def get_stock_news(
 ):
     news = MarketDataService.get_stock_news(ticker)
     return news
+
+
+@router.get("/{ticker}/technical", response_model=TechnicalIndicators)
+def get_stock_technical(
+    ticker: str,
+    current_user: User = Depends(get_current_user)
+):
+    result = MarketDataService.get_stock_technical(ticker)
+    if not result:
+        return TechnicalIndicators(ticker=ticker.upper())
+    return TechnicalIndicators(**result)
