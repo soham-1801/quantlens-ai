@@ -331,7 +331,7 @@ class MarketDataService:
                     "dayHigh": safe_float(getattr(raw, "regularMarketDayHigh", None)),
                     "dayLow": safe_float(getattr(raw, "regularMarketDayLow", None)),
                     "open": safe_float(getattr(raw, "regularMarketOpen", None)),
-                    "volume": safe_int(getattr(raw, "regularMarketVolume", None)),
+                    "volume": safe_int(getattr(raw, "last_volume", None)),
                     "fiftyTwoWeekHigh": safe_float(getattr(raw, "fiftyTwoWeekHigh", None)),
                     "fiftyTwoWeekLow": safe_float(getattr(raw, "fiftyTwoWeekLow", None)),
                     "trailingPE": safe_float(getattr(raw, "trailingPE", None)),
