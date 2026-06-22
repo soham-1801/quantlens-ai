@@ -502,29 +502,93 @@ class MarketDataService:
                         overview.industry = industry
                 except Exception:
                     pass
-            if overview.volume is None:
+            if (overview.market_cap is None or overview.pe_ratio is None or
+                overview.eps is None or overview.website is None or
+                overview.volume is None):
                 try:
-                    raw = yf.Ticker(ticker_upper).fast_info
-                    vol = safe_int(getattr(raw, "last_volume", None))
-                    if vol is not None:
-                        overview.volume = vol
+                    yf_ticker = yf.Ticker(ticker_upper)
+                    fi = yf_ticker.fast_info
+                    fi_dict = dict(fi)
+                    if overview.volume is None:
+                        vol = safe_int(fi_dict.get("lastVolume") or getattr(fi, "last_volume", None))
+                        if vol is not None:
+                            overview.volume = vol
+                    if overview.market_cap is None:
+                        mc = safe_int(fi_dict.get("marketCap"))
+                        if mc is not None:
+                            overview.market_cap = mc
+                    info = yf_ticker.info
+                    if isinstance(info, dict):
+                        if overview.pe_ratio is None:
+                            pe = safe_float(info.get("trailingPE") or info.get("forwardPE"))
+                            if pe is not None:
+                                overview.pe_ratio = pe
+                        if overview.eps is None:
+                            eps = safe_float(info.get("trailingEps") or info.get("forwardEps"))
+                            if eps is not None:
+                                overview.eps = eps
+                        if overview.website is None:
+                            overview.website = info.get("website") or overview.website
+                        if overview.market_cap is None:
+                            mc2 = safe_int(info.get("marketCap"))
+                            if mc2 is not None:
+                                overview.market_cap = mc2
                 except Exception:
                     pass
-            logger.info("VOLUME_TRACE [%s] TIER=Finnhub volume=%s", ticker, overview.volume)
+            logger.warning(
+                "OVERVIEW_TRACE %s",
+                {
+                    "ticker": ticker,
+                    "tier": "finnhub",
+                    "sector": overview.sector,
+                    "industry": overview.industry,
+                    "market_cap": overview.market_cap,
+                    "pe_ratio": overview.pe_ratio,
+                    "eps": overview.eps,
+                    "website": overview.website,
+                    "volume": overview.volume,
+                }
+            )
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
 
         # Tier 2: Direct Yahoo HTTP call (bypasses yfinance library, uses Chrome UA)
         overview = MarketDataService._build_from_yahoo_direct(ticker_upper)
         if overview and overview.current_price is not None:
-            logger.info("VOLUME_TRACE [%s] TIER=YahooDirect volume=%s", ticker, overview.volume)
+            logger.warning(
+                "OVERVIEW_TRACE %s",
+                {
+                    "ticker": ticker,
+                    "tier": "yahoo_direct",
+                    "sector": overview.sector,
+                    "industry": overview.industry,
+                    "market_cap": overview.market_cap,
+                    "pe_ratio": overview.pe_ratio,
+                    "eps": overview.eps,
+                    "website": overview.website,
+                    "volume": overview.volume,
+                }
+            )
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
 
         # Tier 3: yfinance fallback (may be rate-limited on cloud IPs)
         overview = MarketDataService._build_from_yfinance(ticker_upper)
         if overview and overview.current_price is not None:
-            logger.info("VOLUME_TRACE [%s] TIER=yfinance volume=%s", ticker, overview.volume)
+            logger.warning(
+                "OVERVIEW_TRACE %s",
+                {
+                    "ticker": ticker,
+                    "tier": "yfinance",
+                    "sector": overview.sector,
+                    "industry": overview.industry,
+                    "market_cap": overview.market_cap,
+                    "pe_ratio": overview.pe_ratio,
+                    "eps": overview.eps,
+                    "website": overview.website,
+                    "volume": overview.volume,
+                }
+            )
             MarketDataService._overview_cache[ticker_upper] = (now, overview)
             return overview
 
