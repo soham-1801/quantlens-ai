@@ -522,122 +522,106 @@ class MarketDataService:
             if (now - cache_time).total_seconds() < 300:
                 return cached_data
 
-        # Tier 1: Finnhub (requires FINNHUB_API_KEY env var, works from any cloud IP)
+        # Try tiers in order
+        overview = None
+        tier_used = None
+
+        # Tier 1: Finnhub
         overview = MarketDataService._build_from_finnhub(ticker_upper)
         if overview and overview.current_price is not None:
-            # Finnhub does not provide GICS sector/industry — backfill from Yahoo search API (no crumb needed)
-            if overview.sector is None or overview.industry is None:
-                try:
-                    sector, industry = MarketDataService._sector_from_yahoo_search(ticker_upper)
-                    if sector:
-                        overview.sector = sector
-                    if industry:
-                        overview.industry = industry
-                except Exception:
-                    pass
-            if overview.volume is None or overview.market_cap is None:
-                try:
-                    yf_ticker = yf.Ticker(ticker_upper)
-                    fi = yf_ticker.fast_info
-                    fi_dict = dict(fi)
-                    if overview.volume is None:
-                        vol = safe_int(fi_dict.get("lastVolume") or getattr(fi, "last_volume", None))
-                        if vol is not None:
-                            overview.volume = vol
+            tier_used = "finnhub"
+
+        if tier_used is None:
+            # Tier 2: Yahoo Direct
+            overview = MarketDataService._build_from_yahoo_direct(ticker_upper)
+            if overview and overview.current_price is not None:
+                tier_used = "yahoo_direct"
+
+        if tier_used is None:
+            # Tier 3: yfinance
+            overview = MarketDataService._build_from_yfinance(ticker_upper)
+            if overview and overview.current_price is not None:
+                tier_used = "yfinance"
+
+        if tier_used is None:
+            logger.warning("VOLUME_TRACE [%s] ALL TIERS FAILED", ticker)
+            return None
+
+        # Universal backfill: sector/industry from Yahoo search (no crumb needed)
+        if overview.sector is None or overview.industry is None:
+            try:
+                sector, industry = MarketDataService._sector_from_yahoo_search(ticker_upper)
+                if sector:
+                    overview.sector = sector
+                if industry:
+                    overview.industry = industry
+            except Exception:
+                pass
+
+        # Universal backfill: volume/market_cap from fast_info
+        if overview.volume is None or overview.market_cap is None:
+            try:
+                yf_ticker = yf.Ticker(ticker_upper)
+                fi = yf_ticker.fast_info
+                fi_dict = dict(fi)
+                if overview.volume is None:
+                    vol = safe_int(fi_dict.get("lastVolume") or getattr(fi, "last_volume", None))
+                    if vol is not None:
+                        overview.volume = vol
+                if overview.market_cap is None:
+                    mc = safe_int(fi_dict.get("marketCap"))
+                    if mc is not None:
+                        overview.market_cap = mc
+            except Exception:
+                pass
+
+        # Universal backfill: PE/EPS/website/sector/industry from quoteSummary
+        if (overview.pe_ratio is None or overview.eps is None or
+            overview.website is None or overview.sector is None or
+            overview.industry is None):
+            try:
+                qs = MarketDataService._fetch_yahoo_quote_summary(ticker_upper)
+                if qs:
+                    sd = qs.get("summaryDetail", {})
+                    dks = qs.get("defaultKeyStatistics", {})
+                    ap = qs.get("assetProfile", {})
+                    if overview.pe_ratio is None:
+                        pe = safe_float(sd.get("trailingPE", {}).get("raw"))
+                        if pe is not None:
+                            overview.pe_ratio = pe
+                    if overview.eps is None:
+                        eps = safe_float(dks.get("trailingEps", {}).get("raw"))
+                        if eps is not None:
+                            overview.eps = eps
+                    if overview.website is None:
+                        overview.website = ap.get("website") or overview.website
+                    if overview.sector is None:
+                        overview.sector = ap.get("sector") or overview.sector
+                    if overview.industry is None:
+                        overview.industry = ap.get("industry") or overview.industry
                     if overview.market_cap is None:
-                        mc = safe_int(fi_dict.get("marketCap"))
+                        mc = safe_int(sd.get("marketCap", {}).get("raw"))
                         if mc is not None:
                             overview.market_cap = mc
-                except Exception:
-                    pass
-            if (overview.pe_ratio is None or overview.eps is None or
-                overview.website is None or overview.sector is None or
-                overview.industry is None):
-                try:
-                    qs = MarketDataService._fetch_yahoo_quote_summary(ticker_upper)
-                    if qs:
-                        sd = qs.get("summaryDetail", {})
-                        dks = qs.get("defaultKeyStatistics", {})
-                        ap = qs.get("assetProfile", {})
-                        if overview.pe_ratio is None:
-                            pe = safe_float(sd.get("trailingPE", {}).get("raw"))
-                            if pe is not None:
-                                overview.pe_ratio = pe
-                        if overview.eps is None:
-                            eps = safe_float(dks.get("trailingEps", {}).get("raw"))
-                            if eps is not None:
-                                overview.eps = eps
-                        if overview.website is None:
-                            overview.website = ap.get("website") or overview.website
-                        if overview.sector is None:
-                            overview.sector = ap.get("sector") or overview.sector
-                        if overview.industry is None:
-                            overview.industry = ap.get("industry") or overview.industry
-                        if overview.market_cap is None:
-                            mc = safe_int(sd.get("marketCap", {}).get("raw"))
-                            if mc is not None:
-                                overview.market_cap = mc
-                except Exception:
-                    pass
-            logger.warning(
-                "OVERVIEW_TRACE %s",
-                {
-                    "ticker": ticker,
-                    "tier": "finnhub",
-                    "sector": overview.sector,
-                    "industry": overview.industry,
-                    "market_cap": overview.market_cap,
-                    "pe_ratio": overview.pe_ratio,
-                    "eps": overview.eps,
-                    "website": overview.website,
-                    "volume": overview.volume,
-                }
-            )
-            MarketDataService._overview_cache[ticker_upper] = (now, overview)
-            return overview
+            except Exception:
+                pass
 
-        # Tier 2: Direct Yahoo HTTP call (bypasses yfinance library, uses Chrome UA)
-        overview = MarketDataService._build_from_yahoo_direct(ticker_upper)
-        if overview and overview.current_price is not None:
-            logger.warning(
-                "OVERVIEW_TRACE %s",
-                {
-                    "ticker": ticker,
-                    "tier": "yahoo_direct",
-                    "sector": overview.sector,
-                    "industry": overview.industry,
-                    "market_cap": overview.market_cap,
-                    "pe_ratio": overview.pe_ratio,
-                    "eps": overview.eps,
-                    "website": overview.website,
-                    "volume": overview.volume,
-                }
-            )
-            MarketDataService._overview_cache[ticker_upper] = (now, overview)
-            return overview
-
-        # Tier 3: yfinance fallback (may be rate-limited on cloud IPs)
-        overview = MarketDataService._build_from_yfinance(ticker_upper)
-        if overview and overview.current_price is not None:
-            logger.warning(
-                "OVERVIEW_TRACE %s",
-                {
-                    "ticker": ticker,
-                    "tier": "yfinance",
-                    "sector": overview.sector,
-                    "industry": overview.industry,
-                    "market_cap": overview.market_cap,
-                    "pe_ratio": overview.pe_ratio,
-                    "eps": overview.eps,
-                    "website": overview.website,
-                    "volume": overview.volume,
-                }
-            )
-            MarketDataService._overview_cache[ticker_upper] = (now, overview)
-            return overview
-
-        logger.warning("VOLUME_TRACE [%s] ALL TIERS FAILED", ticker)
-        return None
+        logger.warning(
+            "OVERVIEW_TRACE %s",
+            {
+                "ticker": ticker,
+                "tier": tier_used,
+                "sector": overview.sector,
+                "industry": overview.industry,
+                "market_cap": overview.market_cap,
+                "pe_ratio": overview.pe_ratio,
+                "eps": overview.eps,
+                "website": overview.website,
+                "volume": overview.volume,
+            }
+        )
+        MarketDataService._overview_cache[ticker_upper] = (now, overview)
+        return overview
 
     @staticmethod
     def _build_history_from_finnhub(ticker: str, period: str) -> Optional[List[StockHistoryPoint]]:
