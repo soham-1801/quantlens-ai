@@ -575,7 +575,36 @@ class MarketDataService:
             except Exception:
                 pass
 
-        # Universal backfill: PE/EPS/website/sector/industry from quoteSummary
+        # Universal backfill: PE/EPS from Finnhub /stock/earnings
+        # Sum trailing 4 quarters' actual EPS, compute PE = price / trailing_eps
+        # This endpoint does NOT require Yahoo crumb and works on Render
+        if overview.pe_ratio is None or overview.eps is None:
+            try:
+                api_key = settings.FINNHUB_API_KEY
+                if api_key:
+                    url = f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker_upper}&token={api_key}"
+                    resp = requests.get(url, timeout=10)
+                    if resp.status_code == 200:
+                        earnings_data = resp.json()
+                        if isinstance(earnings_data, list) and len(earnings_data) >= 4:
+                            trailing_eps = 0
+                            count = 0
+                            for er in earnings_data:
+                                actual = safe_float(er.get("actual"))
+                                if actual is not None:
+                                    trailing_eps += actual
+                                    count += 1
+                                    if count >= 4:
+                                        break
+                            if count == 4 and trailing_eps > 0:
+                                if overview.eps is None:
+                                    overview.eps = round(trailing_eps, 2)
+                                if overview.pe_ratio is None and overview.current_price and overview.current_price > 0:
+                                    overview.pe_ratio = round(overview.current_price / trailing_eps, 2)
+            except Exception:
+                pass
+
+        # Universal backfill: PE/EPS/website/sector/industry from quoteSummary (fallback)
         if (overview.pe_ratio is None or overview.eps is None or
             overview.website is None or overview.sector is None or
             overview.industry is None):
