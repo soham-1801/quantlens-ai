@@ -11,4 +11,5 @@ python-dotenv>=1.0.1
 alembic>=1.13.1
 email-validator>=2.0.0
 yfinance>=0.2.38
+vaderSentiment==3.3.2
 
