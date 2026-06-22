@@ -6,16 +6,9 @@ import { SentimentCards } from "../components/SentimentCards";
 import { api } from "../services/api";
 import { StockLogo } from "../components/StockLogo";
 import { computePerformanceReturns, formatReturn } from "../utils/performance";
+import { formatMarketCap } from "../utils/format";
 import { useWatchlist } from "../context/WatchlistContext";
 import { useAuth } from "../context/AuthContext";
-
-const formatMarketCap = (val) => {
-  if (!val || !Number.isFinite(val)) return "N/A";
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-  return `$${val.toLocaleString()}`;
-};
 
 const ReturnPill = ({ label, value }) => {
   const isPositive = value !== null && value >= 0;

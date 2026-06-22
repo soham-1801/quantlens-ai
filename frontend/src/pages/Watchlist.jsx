@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useWatchlist } from "../context/WatchlistContext";
 import { StockLogo } from "../components/StockLogo";
+import { formatMarketCap as formatLargeNumber } from "../utils/format";
 
 const formatPrice = (val) => {
   if (val == null || !Number.isFinite(val)) return "N/A";
@@ -28,16 +29,6 @@ const formatPrice = (val) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-};
-
-const formatLargeNumber = (val) => {
-  if (val == null || !Number.isFinite(val)) return "N/A";
-  if (val < 0) return "N/A";
-  if (val === 0) return "$0";
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-  return `$${val.toLocaleString()}`;
 };
 
 const formatVolume = (val) => {
@@ -76,6 +67,7 @@ const formatTimestamp = (ts) => {
 const scoreValuation = (s) => {
   const pe = s.pe_ratio;
   if (pe == null) return 10;
+  if (pe <= 0) return 0;
   if (pe > 50) return 20;
   if (pe > 30) return 40;
   if (pe > 20) return 60;
@@ -612,7 +604,7 @@ export const Watchlist = () => {
           <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
             <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
               <DollarSign className="w-3.5 h-3.5" />
-              Portfolio Value
+              Watchlist Aggregate
             </div>
             <p className="text-lg font-black text-white tabular-nums">
               {analytics.portfolioValue > 0 ? formatCurrency(analytics.portfolioValue) : "N/A"}

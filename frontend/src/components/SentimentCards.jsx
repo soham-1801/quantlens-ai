@@ -4,6 +4,10 @@ import { MessageSquare, ExternalLink, Activity, ArrowUpRight, ArrowDownRight } f
 export const SentimentCards = ({ sentiment }) => {
   if (!sentiment) return null;
 
+  const gaugePosition = (score) => {
+    return Number.isFinite(score) ? `${((score + 1) / 2) * 100}%` : "50%";
+  };
+
   const getSentimentConfig = (score) => {
     if (score > 0.15) {
       return {
@@ -11,7 +15,7 @@ export const SentimentCards = ({ sentiment }) => {
         color: "text-emerald-400",
         bg: "bg-emerald-500/10 border-emerald-500/20",
         gaugeColor: "bg-emerald-500",
-        gaugePosition: `${((score + 1) / 2) * 100}%`
+        gaugePosition: gaugePosition(score)
       };
     } else if (score < -0.15) {
       return {
@@ -19,7 +23,7 @@ export const SentimentCards = ({ sentiment }) => {
         color: "text-red-400",
         bg: "bg-red-500/10 border-red-500/20",
         gaugeColor: "bg-red-500",
-        gaugePosition: `${((score + 1) / 2) * 100}%`
+        gaugePosition: gaugePosition(score)
       };
     } else {
       return {

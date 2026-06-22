@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Search, ChevronDown, ChevronUp, Trash2, Save, Download, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { api } from "../services/api";
+import { formatMarketCap } from "../utils/format";
 
 const TICKERS = [
   "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX",
@@ -123,14 +124,6 @@ const getRatingClass = (rating) => {
 };
 
 const SAVED_SCREENS_KEY = "quantlens_saved_screens";
-
-const formatMarketCap = (val) => {
-  if (val == null || !Number.isFinite(val)) return "—";
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-  return `$${val.toLocaleString()}`;
-};
 
 const FilterSelect = ({ label, value, onChange, options }) => (
   <div>

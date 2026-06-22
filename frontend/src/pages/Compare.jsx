@@ -3,17 +3,10 @@ import { Loader2, TrendingUp, TrendingDown, GitCompare, ArrowLeftRight } from "l
 import { api } from "../services/api";
 import { StockLogo } from "../components/StockLogo";
 import { useWatchlist } from "../context/WatchlistContext";
-
-const formatCompact = (val) => {
-  if (val == null || !Number.isFinite(val)) return "N/A";
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
-  return `$${val.toLocaleString()}`;
-};
+import { formatMarketCap } from "../utils/format";
 
 const formatPrice = (val) => {
-  if (val == null) return "N/A";
+  if (val == null || !Number.isFinite(val)) return "N/A";
   return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
@@ -140,11 +133,11 @@ export const Compare = () => {
       case "company": return overview?.name || stockA || "N/A";
       case "price": return formatPrice(overview?.current_price);
       case "change": return change;
-      case "marketCap": return formatCompact(overview?.market_cap);
+      case "marketCap": return formatMarketCap(overview?.market_cap);
       case "pe": return overview?.pe_ratio != null && Number.isFinite(overview.pe_ratio) ? overview.pe_ratio.toFixed(2) : "N/A";
       case "eps": return overview?.eps != null && Number.isFinite(overview.eps) ? overview.eps.toFixed(2) : "N/A";
       case "divYield": return overview?.dividend_yield != null && Number.isFinite(overview.dividend_yield) ? `${(overview.dividend_yield * 100).toFixed(2)}%` : "N/A";
-      case "volume": return overview?.volume != null ? overview.volume.toLocaleString() : "N/A";
+      case "volume": return overview?.volume != null && Number.isFinite(overview.volume) ? overview.volume.toLocaleString() : "N/A";
       case "range": {
         const hi = overview?.fifty_two_week_high;
         const lo = overview?.fifty_two_week_low;

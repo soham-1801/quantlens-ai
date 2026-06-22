@@ -248,7 +248,7 @@ export const Dashboard = () => {
                         Current Price
                       </p>
                       <p className="text-base font-black text-white mt-0.5">
-                        {item.current_price ? `$${item.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A"}
+                        {item.current_price != null && Number.isFinite(item.current_price) ? `$${item.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A"}
                       </p>
                     </div>
 
@@ -263,8 +263,7 @@ export const Dashboard = () => {
                           }`}
                         >
                           {isPositive ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                          {isPositive ? "+" : ""}
-                          {Number.isFinite(item.price_change_percent) ? `${item.price_change_percent >= 0 ? "+" : ""}${item.price_change_percent.toFixed(2)}` : "N/A"}%
+                          {Number.isFinite(item.price_change_percent) ? `${isPositive ? "+" : ""}${item.price_change_percent.toFixed(2)}` : "N/A"}%
                         </span>
                       ) : (
                         <span className="text-gray-500 font-semibold text-xs mt-1 inline-block">N/A</span>
