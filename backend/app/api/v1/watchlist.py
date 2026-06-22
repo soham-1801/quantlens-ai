@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -8,6 +9,9 @@ from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.schemas.watchlist import WatchlistCreate, WatchlistResponse
 from app.services.market_data import MarketDataService
+
+logger = logging.getLogger(__name__)
+_vol_logger = logging.getLogger("volume_trace")
 
 router = APIRouter()
 
@@ -23,6 +27,18 @@ def get_watchlist(
         price_change_percent = None
         if item.current_price is not None and item.previous_close is not None and item.previous_close > 0:
             price_change_percent = ((item.current_price - item.previous_close) / item.previous_close) * 100
+        
+        # Backfill volume for items added before the yfinance last_volume fix
+        volume = item.volume
+        if volume is None:
+            try:
+                overview = MarketDataService.get_stock_overview(item.ticker)
+                if overview and overview.volume is not None:
+                    volume = overview.volume
+                    item.volume = volume
+                    db.commit()
+            except Exception:
+                pass
                 
         results.append(WatchlistResponse(
             id=item.id,
@@ -39,7 +55,7 @@ def get_watchlist(
             eps=item.eps,
             current_price=item.current_price,
             previous_close=item.previous_close,
-            volume=item.volume,
+            volume=volume,
             price_change_percent=price_change_percent,
             website=item.website,
             updated_at=item.updated_at,
@@ -68,6 +84,17 @@ def get_watchlist_item(
     price_change_percent = None
     if item.current_price is not None and item.previous_close is not None and item.previous_close > 0:
         price_change_percent = ((item.current_price - item.previous_close) / item.previous_close) * 100
+    
+    volume = item.volume
+    if volume is None:
+        try:
+            overview = MarketDataService.get_stock_overview(item.ticker)
+            if overview and overview.volume is not None:
+                volume = overview.volume
+                item.volume = volume
+                db.commit()
+        except Exception:
+            pass
         
     return WatchlistResponse(
         id=item.id,
@@ -84,7 +111,7 @@ def get_watchlist_item(
         eps=item.eps,
         current_price=item.current_price,
         previous_close=item.previous_close,
-        volume=item.volume,
+        volume=volume,
         price_change_percent=price_change_percent,
         website=item.website,
         updated_at=item.updated_at,
@@ -119,6 +146,8 @@ def add_to_watchlist(
             detail=f"Ticker '{ticker_upper}' is already in your watchlist."
         )
         
+    _vol_logger.info("WATCHLIST_ADD [%s] overview.volume=%s", ticker_upper, overview.volume)
+
     # 3. Create entry with persisted overview fields
     new_item = Watchlist(
         user_id=current_user.id,
@@ -193,6 +222,7 @@ def refresh_watchlist_item(
     if not overview:
         refresh_error = f"Failed to fetch latest data for {ticker_upper}"
     else:
+        _vol_logger.info("WATCHLIST_REFRESH [%s] overview.volume=%s old_db_volume=%s", ticker_upper, overview.volume, item.volume)
         item.company_name = overview.name
         item.sector = overview.sector
         item.industry = overview.industry
