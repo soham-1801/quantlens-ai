@@ -525,8 +525,8 @@ class MarketDataService:
             except Exception:
                 pass
 
-        # Universal backfill: volume/market_cap from fast_info
-        if overview.volume is None or overview.market_cap is None:
+        # Universal backfill: volume/market_cap/PE/EPS from fast_info (no crumb needed)
+        if overview.volume is None or overview.market_cap is None or overview.pe_ratio is None or overview.eps is None:
             try:
                 yf_ticker = yf.Ticker(ticker_upper)
                 fi = yf_ticker.fast_info
@@ -539,6 +539,19 @@ class MarketDataService:
                     mc = safe_int(fi_dict.get("marketCap"))
                     if mc is not None:
                         overview.market_cap = mc
+                if overview.pe_ratio is None:
+                    pe = safe_float(fi_dict.get("trailingPE"))
+                    if pe is not None:
+                        overview.pe_ratio = pe
+                if overview.eps is None:
+                    eps = safe_float(fi_dict.get("trailingEps"))
+                    if eps is not None:
+                        overview.eps = eps
+                logger.warning(
+                    "FUNDAMENTAL_SOURCE=fast_info ticker=%s volume=%s market_cap=%s pe=%s eps=%s",
+                    ticker_upper, overview.volume, overview.market_cap,
+                    overview.pe_ratio, overview.eps,
+                )
             except Exception:
                 pass
 
