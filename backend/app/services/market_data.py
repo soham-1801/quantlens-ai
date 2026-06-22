@@ -519,6 +519,13 @@ class MarketDataService:
                             overview.market_cap = mc
                     info = yf_ticker.info
                     if isinstance(info, dict):
+                        logger.warning(
+                            "INFO_KEYS %s ticker=%s",
+                            list(info.keys())[:50],
+                            ticker_upper,
+                        )
+                        for k in ("marketCap", "trailingPE", "forwardPE", "trailingEps", "forwardEps", "website"):
+                            logger.warning("INFO_FIELD %s ticker=%s value=%s", k, ticker_upper, info.get(k))
                         if overview.pe_ratio is None:
                             pe = safe_float(info.get("trailingPE") or info.get("forwardPE"))
                             if pe is not None:
@@ -533,8 +540,11 @@ class MarketDataService:
                             mc2 = safe_int(info.get("marketCap"))
                             if mc2 is not None:
                                 overview.market_cap = mc2
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.exception(
+                        "YFINANCE_BACKFILL_FAILED ticker=%s",
+                        ticker_upper,
+                    )
             logger.warning(
                 "OVERVIEW_TRACE %s",
                 {
