@@ -4,18 +4,23 @@ import re
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
+from cachetools import TTLCache
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 try:
-    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-    _vader = SentimentIntensityAnalyzer()
-    _HAS_VADER = True
+    from transformers import pipeline
+    _finbert = pipeline(
+        "text-classification",
+        model="ProsusAI/finbert",
+        tokenizer="ProsusAI/finbert",
+    )
+    _HAS_FINBERT = True
 except ImportError:
-    _HAS_VADER = False
-    _vader = None
+    _HAS_FINBERT = False
+    _finbert = None
 
 YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -49,9 +54,10 @@ def coalesce(*values):
     return None
 
 class MarketDataService:
-    _overview_cache = {}  # ticker_upper: (timestamp, StockOverview)
-    _history_cache = {}   # (ticker_upper, period): (timestamp, List[StockHistoryPoint])
-    _news_cache = {}      # ticker_upper: (timestamp, List[StockNewsArticle])
+    _overview_cache = TTLCache(maxsize=1000, ttl=900)
+    _history_cache = TTLCache(maxsize=1000, ttl=900)
+    _news_cache = TTLCache(maxsize=1000, ttl=900)
+    _earnings_cache = TTLCache(maxsize=1000, ttl=900)
     _last_debug = {}      # ticker_upper: dict of debug info from last call
 
     @staticmethod
@@ -489,13 +495,10 @@ class MarketDataService:
     @staticmethod
     def get_stock_overview(ticker: str) -> Optional[StockOverview]:
         ticker_upper = ticker.upper().strip()
-        now = datetime.now()
 
-        # 5-minute cache
         if ticker_upper in MarketDataService._overview_cache:
-            cache_time, cached_data = MarketDataService._overview_cache[ticker_upper]
-            if (now - cache_time).total_seconds() < 300:
-                return cached_data
+            logger.info("CACHE_HIT overview %s", ticker_upper)
+            return MarketDataService._overview_cache[ticker_upper]
 
         # Try tiers in order
         overview = None
@@ -675,7 +678,9 @@ class MarketDataService:
                 "volume": overview.volume,
             }
         )
-        MarketDataService._overview_cache[ticker_upper] = (now, overview)
+        if overview:
+            MarketDataService._overview_cache[ticker_upper] = overview
+            logger.info("CACHE_STORE overview %s", ticker_upper)
         return overview
 
     @staticmethod
@@ -841,13 +846,10 @@ class MarketDataService:
     @staticmethod
     def get_stock_news(ticker: str) -> List[StockNewsArticle]:
         ticker_upper = ticker.upper().strip()
-        now = datetime.now()
-        
-        # Check cache (60 seconds TTL)
+
         if ticker_upper in MarketDataService._news_cache:
-            cache_time, cached_data = MarketDataService._news_cache[ticker_upper]
-            if (now - cache_time).total_seconds() < 60:
-                return cached_data
+            logger.info("CACHE_HIT news %s", ticker_upper)
+            return MarketDataService._news_cache[ticker_upper]
                 
         try:
             ticker_obj = yf.Ticker(ticker_upper)
@@ -895,20 +897,27 @@ class MarketDataService:
                         text = title + " " + summary
                     sentiment_label = None
                     sentiment_score = None
-                    if _HAS_VADER and text:
-                        scores = _vader.polarity_scores(text)
-                        compound = scores["compound"]
-                        if compound >= 0.05:
-                            sentiment_label = "Positive"
-                        elif compound <= -0.05:
-                            sentiment_label = "Negative"
-                        else:
-                            sentiment_label = "Neutral"
-                        sentiment_score = round(compound, 2)
-                        logger.info(
-                            "NEWS_SENTIMENT ticker=%s score=%s label=%s",
-                            ticker_upper, sentiment_score, sentiment_label,
-                        )
+                    if _HAS_FINBERT and text:
+                        try:
+                            result = _finbert(text[:512])[0]
+                            label = result["label"]
+                            score = result["score"]
+                            if label == "positive":
+                                sentiment_label = "Positive"
+                                sentiment_score = round(score, 2)
+                            elif label == "negative":
+                                sentiment_label = "Negative"
+                                sentiment_score = round(-score, 2)
+                            else:
+                                sentiment_label = "Neutral"
+                                sentiment_score = 0.0
+                            logger.info(
+                                "NEWS_FINBERT ticker=%s label=%s score=%s",
+                                ticker_upper, sentiment_label, sentiment_score,
+                            )
+                        except Exception:
+                            sentiment_label = None
+                            sentiment_score = None
                     articles.append(StockNewsArticle(
                         title=title,
                         publisher=publisher,
@@ -920,8 +929,8 @@ class MarketDataService:
             
             logger.info("Fetched %d news articles for %s", len(articles), ticker_upper)
             
-            # Save to cache
-            MarketDataService._news_cache[ticker_upper] = (now, articles)
+            MarketDataService._news_cache[ticker_upper] = articles
+            logger.info("CACHE_STORE news %s", ticker_upper)
             return articles
         except Exception as e:
             logger.error("Error fetching news for %s: %s", ticker_upper, e, exc_info=True)
@@ -931,19 +940,20 @@ class MarketDataService:
     def get_stock_earnings(ticker: str) -> Optional[Dict[str, Any]]:
         ticker_upper = ticker.upper().strip()
 
-        # Tier 1: Finnhub
+        if ticker_upper in MarketDataService._earnings_cache:
+            logger.info("CACHE_HIT earnings %s", ticker_upper)
+            return MarketDataService._earnings_cache[ticker_upper]
+
+        result = None
         result = MarketDataService._build_earnings_from_finnhub(ticker_upper)
-        if result:
-            return result
+        if not result:
+            result = MarketDataService._build_earnings_from_yahoo_direct(ticker_upper)
+        if not result:
+            result = MarketDataService._build_earnings_from_yfinance(ticker_upper)
 
-        # Tier 2: Direct Yahoo HTTP
-        result = MarketDataService._build_earnings_from_yahoo_direct(ticker_upper)
         if result:
-            return result
-
-        # Tier 3: yfinance fallback
-        result = MarketDataService._build_earnings_from_yfinance(ticker_upper)
-        if result:
+            MarketDataService._earnings_cache[ticker_upper] = result
+            logger.info("CACHE_STORE earnings %s", ticker_upper)
             return result
 
         logger.warning("All earnings tiers exhausted for %s", ticker_upper)
