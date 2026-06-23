@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.api.v1.auth import get_current_user
 from app.models.user import User
 from app.models.sentiment_cache import SentimentCache
-from app.schemas.stock import StockSentimentSummary, StockNewsArticle, ResearchSummary, EarningsSummary
+from app.schemas.stock import StockSentimentSummary, StockNewsArticle, ResearchSummary, EarningsSummary, Recommendation
 from app.services.market_data import MarketDataService
 from app.services.sentiment import SentimentService
 
@@ -215,3 +215,33 @@ def get_ticker_earnings(
         previous_eps=prev_eps,
         earnings_surprise=earnings_data.get("earnings_surprise")
     )
+
+
+@router.get("/{ticker}/recommendation", response_model=Recommendation)
+def get_ticker_recommendation(
+    ticker: str,
+    current_user: User = Depends(get_current_user)
+):
+    ticker_upper = ticker.upper().strip()
+
+    overview = MarketDataService.get_stock_overview(ticker_upper)
+    if not overview:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Stock ticker '{ticker_upper}' is invalid or has no data."
+        )
+
+    result = MarketDataService.get_stock_recommendation(ticker_upper)
+    if not result:
+        return Recommendation(
+            ticker=ticker_upper,
+            signal="HOLD",
+            strength="Neutral",
+            score=50,
+            technical_score=50,
+            sentiment_score=50,
+            risk_level="Medium",
+            reasons=["Insufficient data for recommendation analysis"]
+        )
+
+    return Recommendation(**result)

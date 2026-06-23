@@ -95,3 +95,14 @@ class TechnicalIndicators(BaseModel):
     macd: MACDData = MACDData()
     bollinger: BollingerBands = BollingerBands()
     atr: Optional[float] = None
+
+
+class Recommendation(BaseModel):
+    ticker: str
+    signal: str
+    strength: str
+    score: float
+    technical_score: float
+    sentiment_score: float
+    risk_level: str
+    reasons: List[str]

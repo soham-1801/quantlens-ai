@@ -1262,3 +1262,150 @@ class MarketDataService:
         except Exception as e:
             logger.error("Error computing technicals for %s: %s", ticker_upper, e)
             return None
+
+    @staticmethod
+    def get_stock_recommendation(ticker: str) -> Optional[Dict[str, Any]]:
+        ticker_upper = ticker.upper().strip()
+
+        technical = MarketDataService.get_stock_technical(ticker_upper)
+
+        from app.services.sentiment import SentimentService
+        sentiment_label = "neutral"
+        sentiment_score_val = 0.0
+        news = None
+        try:
+            news = MarketDataService.get_stock_news(ticker_upper)
+        except Exception:
+            logger.warning("RECOMMENDATION_NEWS_FAILED ticker=%s", ticker_upper)
+        if news:
+            _, sentiment_score_val, _ = SentimentService.analyze_news_list(news)
+
+        reasons = []
+        tech_score = 50
+
+        # Technical scoring
+        if technical:
+            price = technical.get("current_price")
+            rsi = technical.get("rsi")
+            ema20 = technical.get("ema20")
+            ema50 = technical.get("ema50")
+            sma200 = technical.get("sma200")
+            macd = technical.get("macd", {})
+            bb = technical.get("bollinger", {})
+
+            # RSI
+            if rsi is not None:
+                if rsi < 30:
+                    tech_score += 25
+                    reasons.append(f"RSI at {rsi:.1f} — oversold territory suggests upside potential")
+                elif rsi < 40:
+                    tech_score += 10
+                    reasons.append(f"RSI at {rsi:.1f} — approaching oversold level")
+                elif rsi > 70:
+                    tech_score -= 25
+                    reasons.append(f"RSI at {rsi:.1f} — overbought territory suggests caution")
+                else:
+                    reasons.append(f"RSI at {rsi:.1f} — neutral momentum")
+
+            # Trend vs EMAs/SMA
+            if price is not None and ema20 is not None and price > ema20:
+                tech_score += 10
+                reasons.append(f"Price above 20-day EMA — short-term bullish")
+            if price is not None and ema50 is not None and price > ema50:
+                tech_score += 15
+                reasons.append(f"Price above 50-day EMA — medium-term bullish")
+            if price is not None and sma200 is not None and price > sma200:
+                tech_score += 20
+                reasons.append(f"Price above 200-day SMA — long-term bullish trend intact")
+
+            # MACD
+            macd_val = macd.get("macd")
+            signal_val = macd.get("signal")
+            if macd_val is not None and signal_val is not None:
+                if macd_val > signal_val:
+                    tech_score += 15
+                    reasons.append("MACD above signal line — bullish momentum")
+                else:
+                    tech_score -= 15
+                    reasons.append("MACD below signal line — bearish momentum")
+
+            # Bollinger Bands
+            bb_lower = bb.get("lower")
+            bb_upper = bb.get("upper")
+            if price is not None and bb_lower is not None and bb_upper is not None:
+                if price <= bb_lower * 1.02:
+                    tech_score += 10
+                    reasons.append("Price near lower Bollinger Band — potential bounce zone")
+                elif price >= bb_upper * 0.98:
+                    tech_score -= 10
+                    reasons.append("Price near upper Bollinger Band — extended move")
+
+            tech_score = max(0, min(100, tech_score))
+
+            reasons.append(f"Technical score: {tech_score}/100")
+        else:
+            reasons.append("Technical data unavailable — scoring based on sentiment only")
+
+        # Sentiment scoring
+        if sentiment_score_val >= 0.5:
+            sent_score = 100
+            sentiment_label = "very_positive"
+        elif sentiment_score_val >= 0.15:
+            sent_score = 75
+            sentiment_label = "positive"
+        elif sentiment_score_val > -0.15:
+            sent_score = 50
+            sentiment_label = "neutral"
+        elif sentiment_score_val > -0.5:
+            sent_score = 25
+            sentiment_label = "negative"
+        else:
+            sent_score = 0
+            sentiment_label = "very_negative"
+
+        reasons.append(f"News sentiment: {sentiment_label.replace('_', ' ')} ({sentiment_score_val:+.2f})")
+
+        # Final score: 70% technical, 30% sentiment
+        final_score = round(tech_score * 0.7 + sent_score * 0.3)
+
+        # Signal mapping
+        if final_score >= 80:
+            signal = "STRONG BUY"
+            strength = "High"
+        elif final_score >= 65:
+            signal = "BUY"
+            strength = "Moderate"
+        elif final_score >= 45:
+            signal = "HOLD"
+            strength = "Neutral"
+        elif final_score >= 25:
+            signal = "SELL"
+            strength = "Moderate"
+        else:
+            signal = "STRONG SELL"
+            strength = "High"
+
+        # Risk level
+        risk_level = "Low"
+        if technical:
+            atr_val = technical.get("atr")
+            price = technical.get("current_price")
+            if atr_val is not None and price is not None and price > 0:
+                atr_pct = atr_val / price * 100
+                if atr_pct > 3:
+                    risk_level = "High"
+                elif atr_pct > 1.5:
+                    risk_level = "Medium"
+
+        result = {
+            "ticker": ticker_upper,
+            "signal": signal,
+            "strength": strength,
+            "score": final_score,
+            "technical_score": tech_score,
+            "sentiment_score": sent_score,
+            "risk_level": risk_level,
+            "reasons": reasons,
+        }
+
+        return result
