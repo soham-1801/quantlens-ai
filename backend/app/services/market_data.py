@@ -213,12 +213,18 @@ class MarketDataService:
         name = pr.get("longName") or pr.get("shortName") or ticker
         current_price = ext(fd, "currentPrice") or ext(pr, "regularMarketPrice") or ext(sd, "regularMarketPrice")
 
-        raw_dy = ext(sd, "dividendYield")
-        dividend_yield = None
-        if raw_dy is not None:
-            val = safe_float(raw_dy)
-            if val is not None:
-                dividend_yield = val / 100.0
+        dividend_yield = safe_float(ext(sd, "dividendYield"))
+        if dividend_yield is None:
+            dividend_yield = safe_float(ext(sd, "trailingAnnualDividendYield"))
+        cp = safe_float(current_price)
+        if dividend_yield is None:
+            dy_rate = safe_float(ext(sd, "dividendRate"))
+            if dy_rate is not None and cp is not None and cp > 0:
+                dividend_yield = round(dy_rate / cp, 6)
+        if dividend_yield is None:
+            dy_rate = safe_float(ext(sd, "trailingAnnualDividendRate"))
+            if dy_rate is not None and cp is not None and cp > 0:
+                dividend_yield = round(dy_rate / cp, 6)
 
         overview = StockOverview(
             ticker=symbol.upper(),
@@ -286,7 +292,7 @@ class MarketDataService:
             current_price = safe_float(quote.get("c"))
 
             raw_dy = safe_float(metric.get("dividendYield"))
-            dividend_yield = raw_dy / 100.0 if raw_dy is not None and abs(raw_dy) > 1 else raw_dy
+            dividend_yield = raw_dy / 100.0 if raw_dy is not None else None
 
             mc_raw = profile.get("marketCapitalization")
             market_cap = safe_int(mc_raw * 1_000_000) if mc_raw is not None else None
@@ -417,12 +423,19 @@ class MarketDataService:
                 safe_float(info.get("previousClose"))
             )
 
-            raw_dy = first(fi.get("dividendYield"), info.get("dividendYield"))
-            dividend_yield = None
-            if raw_dy is not None:
-                val = safe_float(raw_dy)
-                if val is not None:
-                    dividend_yield = val / 100.0
+            dividend_yield = safe_float(first(
+                fi.get("dividendYield"),
+                info.get("dividendYield"),
+                info.get("trailingAnnualDividendYield"),
+            ))
+            if dividend_yield is None:
+                dy_rate = safe_float(info.get("dividendRate"))
+                if dy_rate is not None and current_price is not None and current_price > 0:
+                    dividend_yield = round(dy_rate / current_price, 6)
+            if dividend_yield is None:
+                dy_rate = safe_float(info.get("trailingAnnualDividendRate"))
+                if dy_rate is not None and current_price is not None and current_price > 0:
+                    dividend_yield = round(dy_rate / current_price, 6)
 
             result = StockOverview(
                 ticker=symbol.upper(),
@@ -564,15 +577,15 @@ class MarketDataService:
             except Exception:
                 pass
 
-        # Universal backfill: PE/EPS/website from Finnhub (no Yahoo dependency)
-        if overview.pe_ratio is None or overview.eps is None or overview.website is None:
+        # Universal backfill: PE/EPS/dividend_yield/website from Finnhub (no Yahoo dependency)
+        if overview.pe_ratio is None or overview.eps is None or overview.dividend_yield is None or overview.website is None:
             try:
                 api_key = settings.FINNHUB_API_KEY
                 if not api_key:
                     pass
                 else:
-                    # Step 1: Finnhub metric endpoint (peTTM, epsTTM)
-                    if overview.pe_ratio is None or overview.eps is None:
+                    # Step 1: Finnhub metric endpoint (peTTM, epsTTM, dividendYield)
+                    if overview.pe_ratio is None or overview.eps is None or overview.dividend_yield is None:
                         url = f"https://finnhub.io/api/v1/stock/metric?symbol={ticker_upper}&metric=all&token={api_key}"
                         resp = requests.get(url, timeout=10)
                         if resp.status_code == 200:
@@ -583,9 +596,12 @@ class MarketDataService:
                                 overview.pe_ratio = pe
                             if eps is not None and overview.eps is None:
                                 overview.eps = eps
+                            dy = safe_float(metric.get("dividendYield"))
+                            if dy is not None and overview.dividend_yield is None:
+                                overview.dividend_yield = dy / 100.0
                             logger.warning(
-                                "FUNDAMENTAL_SOURCE=finnhub_metric ticker=%s PE_COMPUTED=%s EPS_COMPUTED=%s",
-                                ticker_upper, pe, eps,
+                                "FUNDAMENTAL_SOURCE=finnhub_metric ticker=%s PE_COMPUTED=%s EPS_COMPUTED=%s DY_COMPUTED=%s",
+                                ticker_upper, pe, eps, dy,
                             )
 
                     # Step 2: Finnhub earnings endpoint (trailing EPS, compute PE from price)
