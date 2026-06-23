@@ -1173,6 +1173,7 @@ class MarketDataService:
 
             ticker_obj = yf.Ticker(ticker_upper)
             df = ticker_obj.history(period="1y")
+            df = df[df["Close"].notna()].copy()
             if df.empty or len(df) < 50:
                 logger.warning("Insufficient history for technicals on %s", ticker_upper)
                 return None
