@@ -678,6 +678,42 @@ class MarketDataService:
             except Exception:
                 pass
 
+        # Step 4: Backfill dividend_yield from yfinance (if still missing after Finnhub)
+        if overview.dividend_yield is None:
+            try:
+                yf_ticker = yf.Ticker(ticker_upper)
+                fi = yf_ticker.fast_info
+                fi_dict = dict(fi)
+                dy = safe_float(fi_dict.get("dividendYield"))
+                if dy is None:
+                    info = {}
+                    try:
+                        raw_info = yf_ticker.info
+                        if isinstance(raw_info, dict):
+                            info = raw_info
+                    except Exception:
+                        info = {}
+                    dy = safe_float(coalesce(
+                        info.get("dividendYield"),
+                        info.get("trailingAnnualDividendYield"),
+                    ))
+                    if dy is None:
+                        dy_rate = safe_float(info.get("dividendRate"))
+                        if dy_rate is not None and overview.current_price is not None and overview.current_price > 0:
+                            dy = round(dy_rate / overview.current_price, 6)
+                    if dy is None:
+                        dy_rate = safe_float(info.get("trailingAnnualDividendRate"))
+                        if dy_rate is not None and overview.current_price is not None and overview.current_price > 0:
+                            dy = round(dy_rate / overview.current_price, 6)
+                if dy is not None:
+                    overview.dividend_yield = dy
+                    logger.warning(
+                        "FUNDAMENTAL_SOURCE=yfinance_dy_backfill ticker=%s DY_COMPUTED=%s",
+                        ticker_upper, dy,
+                    )
+            except Exception:
+                pass
+
         logger.warning(
             "OVERVIEW_TRACE %s",
             {
