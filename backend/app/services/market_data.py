@@ -423,19 +423,28 @@ class MarketDataService:
                 safe_float(info.get("previousClose"))
             )
 
-            dividend_yield = safe_float(first(
-                fi.get("dividendYield"),
+            # Priority 1: direct yield fields from info (format varies by exchange)
+            dy_direct = safe_float(first(
                 info.get("dividendYield"),
                 info.get("trailingAnnualDividendYield"),
             ))
+            if dy_direct is not None:
+                dividend_yield = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
+            # Priority 2: dividendRate/currentPrice → always decimal form
             if dividend_yield is None:
                 dy_rate = safe_float(info.get("dividendRate"))
                 if dy_rate is not None and current_price is not None and current_price > 0:
                     dividend_yield = round(dy_rate / current_price, 6)
+            # Priority 3: trailingAnnualDividendRate/currentPrice → always decimal form
             if dividend_yield is None:
                 dy_rate = safe_float(info.get("trailingAnnualDividendRate"))
                 if dy_rate is not None and current_price is not None and current_price > 0:
                     dividend_yield = round(dy_rate / current_price, 6)
+            # Priority 4: fast_info dividendYield (format varies by exchange)
+            if dividend_yield is None:
+                dy_direct = safe_float(fi.get("dividendYield"))
+                if dy_direct is not None:
+                    dividend_yield = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
 
             result = StockOverview(
                 ticker=symbol.upper(),
@@ -696,24 +705,30 @@ class MarketDataService:
                 except Exception:
                     info = {}
 
-                dy = safe_float(coalesce(
+                # Priority 1: info dividendYield fields (format varies by exchange)
+                dy_direct = safe_float(coalesce(
                     info.get("dividendYield"),
                     info.get("trailingAnnualDividendYield"),
                 ))
+                if dy_direct is not None:
+                    dy = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
+                # Priority 2: dividendRate/currentPrice → always decimal form
                 if dy is None:
                     dy_rate = safe_float(info.get("dividendRate"))
                     if dy_rate is not None and overview.current_price is not None and overview.current_price > 0:
                         dy = round(dy_rate / overview.current_price, 6)
+                # Priority 3: trailingAnnualDividendRate/currentPrice → always decimal form
                 if dy is None:
                     dy_rate = safe_float(info.get("trailingAnnualDividendRate"))
                     if dy_rate is not None and overview.current_price is not None and overview.current_price > 0:
                         dy = round(dy_rate / overview.current_price, 6)
+                # Priority 4: fast_info dividendYield (format varies by exchange)
                 if dy is None:
                     fi = yf_ticker.fast_info
                     fi_dict = dict(fi)
-                    dy = safe_float(fi_dict.get("dividendYield"))
-                    if dy is not None:
-                        dy = dy / 100.0
+                    dy_direct = safe_float(fi_dict.get("dividendYield"))
+                    if dy_direct is not None:
+                        dy = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
                 if dy is not None:
                     overview.dividend_yield = dy
                     logger.warning(
