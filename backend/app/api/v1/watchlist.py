@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
+from sqlalchemy.exc import IntegrityError
 from typing import List
 from app.core.database import get_db
 from app.api.v1.auth import get_current_user
@@ -134,15 +135,14 @@ def add_to_watchlist(
             detail=f"Cannot add to watchlist. Ticker '{ticker_upper}' is invalid or has no data."
         )
         
-    # 2. Check if already watchlisted by user
+    # 2. Check if already watchlisted
     existing = db.query(Watchlist).filter(
         Watchlist.user_id == current_user.id,
         Watchlist.ticker == ticker_upper
     ).first()
-    
     if existing:
         raise HTTPException(
-            status_code=400,
+            status_code=409,
             detail=f"Ticker '{ticker_upper}' is already in your watchlist."
         )
         
@@ -170,8 +170,16 @@ def add_to_watchlist(
     try:
         db.commit()
         db.refresh(new_item)
+    except IntegrityError as e:
+        db.rollback()
+        logger.error("IntegrityError adding %s to watchlist for user %d: %s", ticker_upper, current_user.id, e)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ticker '{ticker_upper}' is already in your watchlist."
+        )
     except Exception as e:
         db.rollback()
+        logger.error("Unexpected error adding %s to watchlist for user %d: %s", ticker_upper, current_user.id, e)
         raise HTTPException(
             status_code=500,
             detail="Failed to save watchlist item due to a database error."
@@ -244,6 +252,7 @@ def refresh_watchlist_item(
         db.refresh(item)
     except Exception as e:
         db.rollback()
+        logger.error("Error refreshing %s in watchlist for user %d: %s", ticker_upper, current_user.id, e)
         raise HTTPException(
             status_code=500,
             detail="Failed to refresh watchlist item due to a database error."
@@ -299,6 +308,7 @@ def remove_from_watchlist(
         db.commit()
     except Exception as e:
         db.rollback()
+        logger.error("Error deleting %s from watchlist for user %d: %s", ticker_upper, current_user.id, e)
         raise HTTPException(
             status_code=500,
             detail="Failed to delete watchlist item due to a database error."
