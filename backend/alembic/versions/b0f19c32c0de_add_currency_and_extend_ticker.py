@@ -19,32 +19,64 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add currency column and modify ticker length in watchlists
-    with op.batch_alter_table('watchlists') as batch_op:
-        batch_op.add_column(sa.Column('currency', sa.String(length=10), nullable=True, server_default='USD'))
-        batch_op.alter_column('ticker',
-               existing_type=sa.VARCHAR(length=10),
-               type_=sa.String(length=32),
-               existing_nullable=False)
+    conn = op.get_bind()
+    from sqlalchemy import inspect
+    inspector = inspect(conn)
 
-    # Modify ticker length in sentiment_cache
-    with op.batch_alter_table('sentiment_cache') as batch_op:
-        batch_op.alter_column('ticker',
-               existing_type=sa.VARCHAR(length=10),
-               type_=sa.String(length=32),
-               existing_nullable=False)
+    # 1. Watchlists changes
+    columns_watchlists = {c["name"]: c for c in inspector.get_columns("watchlists")}
+    
+    # Check if currency exists
+    if "currency" not in columns_watchlists:
+        with op.batch_alter_table('watchlists') as batch_op:
+            batch_op.add_column(sa.Column('currency', sa.String(length=10), nullable=True, server_default='USD'))
+            
+    # Check ticker column length
+    ticker_col = columns_watchlists.get("ticker")
+    if ticker_col and getattr(ticker_col['type'], 'length', None) != 32:
+        with op.batch_alter_table('watchlists') as batch_op:
+            batch_op.alter_column('ticker',
+                   existing_type=ticker_col['type'],
+                   type_=sa.String(length=32),
+                   existing_nullable=False)
+
+    # 2. Sentiment Cache changes (only if table exists)
+    if inspector.has_table('sentiment_cache'):
+        columns_sentiment = {c["name"]: c for c in inspector.get_columns("sentiment_cache")}
+        ticker_col_sent = columns_sentiment.get("ticker")
+        if ticker_col_sent and getattr(ticker_col_sent['type'], 'length', None) != 32:
+            with op.batch_alter_table('sentiment_cache') as batch_op:
+                batch_op.alter_column('ticker',
+                       existing_type=ticker_col_sent['type'],
+                       type_=sa.String(length=32),
+                       existing_nullable=False)
 
 
 def downgrade() -> None:
-    with op.batch_alter_table('sentiment_cache') as batch_op:
-        batch_op.alter_column('ticker',
-               existing_type=sa.String(length=32),
-               type_=sa.VARCHAR(length=10),
-               existing_nullable=False)
+    conn = op.get_bind()
+    from sqlalchemy import inspect
+    inspector = inspect(conn)
 
-    with op.batch_alter_table('watchlists') as batch_op:
-        batch_op.alter_column('ticker',
-               existing_type=sa.String(length=32),
-               type_=sa.VARCHAR(length=10),
-               existing_nullable=False)
-        batch_op.drop_column('currency')
+    if inspector.has_table('sentiment_cache'):
+        columns_sentiment = {c["name"]: c for c in inspector.get_columns("sentiment_cache")}
+        ticker_col_sent = columns_sentiment.get("ticker")
+        if ticker_col_sent and getattr(ticker_col_sent['type'], 'length', None) == 32:
+            with op.batch_alter_table('sentiment_cache') as batch_op:
+                batch_op.alter_column('ticker',
+                       existing_type=sa.String(length=32),
+                       type_=sa.VARCHAR(length=10),
+                       existing_nullable=False)
+
+    if inspector.has_table('watchlists'):
+        columns_watchlists = {c["name"]: c for c in inspector.get_columns("watchlists")}
+        ticker_col_watch = columns_watchlists.get("ticker")
+        if ticker_col_watch and getattr(ticker_col_watch['type'], 'length', None) == 32:
+            with op.batch_alter_table('watchlists') as batch_op:
+                batch_op.alter_column('ticker',
+                       existing_type=sa.String(length=32),
+                       type_=sa.VARCHAR(length=10),
+                       existing_nullable=False)
+                       
+        if 'currency' in columns_watchlists:
+            with op.batch_alter_table('watchlists') as batch_op:
+                batch_op.drop_column('currency')

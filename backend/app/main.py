@@ -16,7 +16,8 @@ from app.models.sentiment_cache import SentimentCache
 
 
 # Auto-create tables if they don't exist (primarily for SQLite development)
-Base.metadata.create_all(bind=engine)
+if settings.DATABASE_URL.startswith("sqlite"):
+    Base.metadata.create_all(bind=engine)
 
 from fastapi.openapi.utils import get_openapi
 
