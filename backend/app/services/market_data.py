@@ -92,7 +92,8 @@ def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
     metric = _finnhub_metric(ticker)
     if not profile:
         return None
-    current_price = safe_float(profile.get("shareOutstanding"))
+    cap_raw = profile.get("marketCapitalization")
+    market_cap = (safe_int(cap_raw) * 1_000_000) if cap_raw is not None else None
     return StockOverview(
         ticker=profile.get("ticker", ticker).upper(),
         name=profile.get("name", ticker),
@@ -101,10 +102,10 @@ def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
         industry=None,
         exchange=profile.get("exchange"),
         website=profile.get("weburl"),
-        market_cap=safe_int(profile.get("marketCapitalization")),
+        market_cap=market_cap,
         pe_ratio=safe_float(metric.get("peTTM") if metric else None),
         dividend_yield=safe_float(metric.get("dividendYieldIndicatedAnnual") if metric else None),
-        current_price=safe_float(profile.get("shareOutstanding")),
+        current_price=None,
         day_high=None,
         day_low=None,
         fifty_two_week_high=safe_float(metric.get("52WeekHigh") if metric else None),

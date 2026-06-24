@@ -124,6 +124,8 @@ const getRatingClass = (rating) => {
 };
 
 const SAVED_SCREENS_KEY = "quantlens_saved_screens";
+const STOCKS_CACHE_KEY = "quantlens_screener_cache";
+const STOCKS_CACHE_TTL = 10 * 60 * 1000;
 
 const FilterSelect = ({ label, value, onChange, options }) => (
   <div>
@@ -201,6 +203,24 @@ export const Screener = () => {
   }, [savedScreens]);
 
   useEffect(() => {
+    const cached = (() => {
+      try {
+        const raw = localStorage.getItem(STOCKS_CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Date.now() - parsed.ts < STOCKS_CACHE_TTL) {
+            return parsed.data;
+          }
+        }
+      } catch {}
+      return null;
+    })();
+    if (cached) {
+      setStocks(cached);
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     const fetchAll = async () => {
       setLoading(true);
@@ -224,6 +244,9 @@ export const Screener = () => {
       }
       if (!controller.signal.aborted) {
         setStocks(results);
+        try {
+          localStorage.setItem(STOCKS_CACHE_KEY, JSON.stringify({ data: results, ts: Date.now() }));
+        } catch {}
         setLoading(false);
       }
     };
