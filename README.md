@@ -230,40 +230,6 @@ Final technical score clamped to `[0, 100]`.
 
 ---
 
-## Application Screenshots
-
-### Dashboard
-![Dashboard](screenshots/dashboard.png)
-
-Workspace overview showing recent searches, viewed stocks, and watchlist management.
-
-### Stock Analysis
-![Stock Analysis](screenshots/stock-analysis.png)
-
-Detailed stock analysis page with price history, valuation metrics, company information, dividend yield, and market statistics.
-
-### News & Sentiment Analysis
-![News & Sentiment](screenshots/sentiment-news.jpeg)
-
-Real-time financial news aggregation with AI-powered sentiment analysis and bullish/bearish scoring.
-
-### Stock Comparison
-![Stock Comparison](screenshots/compare.png)
-
-Side-by-side comparison of multiple stocks including valuation, performance, dividend yield, and key financial metrics.
-
-### AI Stock Screener
-![AI Screener](screenshots/screener.jpeg)
-
-Advanced stock screening interface with quantitative filters, rankings, and AI-generated stock recommendations.
-
-### Watchlist Management
-![Watchlist](screenshots/Watchlist.png)
-
-Personalized watchlist tracking with real-time monitoring and quick access to favorite stocks.
-
----
-
 ## Tech Stack
 
 ### Frontend
@@ -554,8 +520,20 @@ Three-layer cache strategy to minimize API calls:
 
 ---
 
+## Architecture
+
+![System Architecture](screenshots/architecture.png)
+
+QuantLens AI uses a React frontend and FastAPI backend with multi-provider market data aggregation, intelligent fallback mechanisms, sentiment analysis, caching, and watchlist management.
+
 ## Author
 
-[Soham Mangroliya](https://github.com/yourusername)
+Soham Mangroliya
 
-Built with FastAPI, React, and Yahoo Finance data. Deployed on Vercel + Render.
+Aspiring Data Scientist | AI/ML Engineer
+
+Passionate about Machine Learning, Financial Analytics, NLP, and Data Engineering.
+
+- GitHub: https://github.com/soham-1801
+
+- LinkedIn: https://www.linkedin.com/in/soham-mangroliya/

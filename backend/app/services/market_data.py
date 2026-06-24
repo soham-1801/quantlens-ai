@@ -1,28 +1,9 @@
 import yfinance as yf
-from yfinance.exceptions import YFRateLimitError
 import requests
 import re
-import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
-from cachetools import TTLCache
+from datetime import datetime
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
-from app.core.config import settings
-
-logger = logging.getLogger(__name__)
-
-try:
-    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-    _vader = SentimentIntensityAnalyzer()
-    _HAS_VADER = True
-except ImportError:
-    _HAS_VADER = False
-    _vader = None
-
-YAHOO_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json",
-}
 
 def safe_float(val) -> Optional[float]:
     if val is None:
@@ -44,19 +25,10 @@ def safe_int(val) -> Optional[int]:
     except (ValueError, TypeError):
         return None
 
-def coalesce(*values):
-    for v in values:
-        if v is not None:
-            return v
-    return None
-
 class MarketDataService:
-    _overview_cache = TTLCache(maxsize=1000, ttl=900)
-    _history_cache = TTLCache(maxsize=1000, ttl=900)
-    _news_cache = TTLCache(maxsize=1000, ttl=900)
-    _earnings_cache = TTLCache(maxsize=1000, ttl=900)
-    _technical_cache = TTLCache(maxsize=1000, ttl=900)
-    _last_debug = {}      # ticker_upper: dict of debug info from last call
+    _overview_cache = {}  # ticker_upper: (timestamp, StockOverview)
+    _history_cache = {}   # (ticker_upper, period): (timestamp, List[StockHistoryPoint])
+    _news_cache = {}      # ticker_upper: (timestamp, List[StockNewsArticle])
 
     @staticmethod
     def search_stocks(query: str) -> List[StockSearchResult]:
@@ -172,718 +144,67 @@ class MarketDataService:
         return results[:8]
 
     @staticmethod
-    def _raw(obj: Any, *keys: str) -> Any:
-        """Extract the 'raw' numeric value from a Yahoo API nested dict."""
-        current = obj
-        for k in keys:
-            if isinstance(current, dict):
-                current = current.get(k)
-            else:
-                return None
-        if isinstance(current, dict):
-            return current.get("raw", current)
-        return current
-
-    @staticmethod
-    def _build_from_yahoo_direct(ticker: str) -> Optional[StockOverview]:
-        """Fetch overview via direct HTTP to Yahoo Finance v10 API (bypasses yfinance library)."""
-        url = (
-            f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
-            f"?modules=assetProfile,summaryDetail,price,financialData"
-        )
-        resp = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
-        if resp.status_code != 200:
-            MarketDataService._last_debug[ticker] = {"source": "direct_yahoo", "status": resp.status_code}
-            return None
-
-        data = resp.json()
-        results = data.get("quoteSummary", {}).get("result", [])
-        if not results:
-            MarketDataService._last_debug[ticker] = {"source": "direct_yahoo", "status": 200, "result_count": 0}
-            return None
-
-        quote = results[0]
-        ap = quote.get("assetProfile") or {}
-        sd = quote.get("summaryDetail") or {}
-        pr = quote.get("price") or {}
-        fd = quote.get("financialData") or {}
-        ext = MarketDataService._raw
-
-        symbol = pr.get("symbol") or ticker
-        name = pr.get("longName") or pr.get("shortName") or ticker
-        current_price = ext(fd, "currentPrice") or ext(pr, "regularMarketPrice") or ext(sd, "regularMarketPrice")
-
-        dividend_yield = safe_float(ext(sd, "dividendYield"))
-        if dividend_yield is None:
-            dividend_yield = safe_float(ext(sd, "trailingAnnualDividendYield"))
-        cp = safe_float(current_price)
-        if dividend_yield is None:
-            dy_rate = safe_float(ext(sd, "dividendRate"))
-            if dy_rate is not None and cp is not None and cp > 0:
-                dividend_yield = round(dy_rate / cp, 6)
-        if dividend_yield is None:
-            dy_rate = safe_float(ext(sd, "trailingAnnualDividendRate"))
-            if dy_rate is not None and cp is not None and cp > 0:
-                dividend_yield = round(dy_rate / cp, 6)
-
-        overview = StockOverview(
-            ticker=symbol.upper(),
-            name=name or ticker,
-            description=ap.get("longBusinessSummary"),
-            sector=ap.get("sector"),
-            industry=ap.get("industry"),
-            exchange=pr.get("exchange"),
-            website=ap.get("website"),
-            market_cap=safe_int(ext(pr, "marketCap") or ext(sd, "marketCap")),
-            pe_ratio=safe_float(ext(sd, "trailingPE") or ext(sd, "forwardPE")),
-            dividend_yield=dividend_yield,
-            current_price=safe_float(current_price),
-            day_high=safe_float(ext(sd, "dayHigh") or ext(pr, "regularMarketDayHigh")),
-            day_low=safe_float(ext(sd, "dayLow") or ext(pr, "regularMarketDayLow")),
-            fifty_two_week_high=safe_float(ext(sd, "fiftyTwoWeekHigh")),
-            fifty_two_week_low=safe_float(ext(sd, "fiftyTwoWeekLow")),
-            volume=safe_int(ext(sd, "volume") or ext(pr, "regularMarketVolume")),
-            previous_close=safe_float(ext(sd, "previousClose") or ext(pr, "previousClose")),
-            open_price=safe_float(ext(sd, "open") or ext(pr, "regularMarketOpen")),
-            eps=safe_float(ext(fd, "epsTrailingTwelveMonths") or ext(fd, "epsForward")),
-            beta=safe_float(ext(sd, "beta")),
-            avg_volume=safe_int(ext(sd, "averageVolume") or ext(sd, "averageDailyVolume10Day")),
-        )
-
-        MarketDataService._last_debug[ticker] = {
-            "source": "direct_yahoo",
-            "current_price_before": current_price,
-            "market_cap_before": safe_int(ext(pr, "marketCap") or ext(sd, "marketCap")),
-            "name_before": name,
-            "symbol_before": symbol,
-        }
-        return overview
-
-    @staticmethod
-    def _build_from_finnhub(ticker: str) -> Optional[StockOverview]:
-        """Fetch overview from Finnhub API (requires FINNHUB_API_KEY in settings)."""
-        api_key = settings.FINNHUB_API_KEY
-        if not api_key:
-            return None
-
+    def get_stock_overview(ticker: str) -> Optional[StockOverview]:
+        ticker_upper = ticker.upper().strip()
+        now = datetime.now()
+        
+        # Check cache (60 seconds TTL)
+        if ticker_upper in MarketDataService._overview_cache:
+            cache_time, cached_data = MarketDataService._overview_cache[ticker_upper]
+            if (now - cache_time).total_seconds() < 60:
+                return cached_data
+                
         try:
-            quote_resp = requests.get(
-                f"https://finnhub.io/api/v1/quote?symbol={ticker}&token={api_key}",
-                timeout=10,
-            )
-            profile_resp = requests.get(
-                f"https://finnhub.io/api/v1/stock/profile2?symbol={ticker}&token={api_key}",
-                timeout=10,
-            )
-            metric_resp = requests.get(
-                f"https://finnhub.io/api/v1/stock/metric?symbol={ticker}&metric=all&token={api_key}",
-                timeout=10,
-            )
-
-            if quote_resp.status_code != 200 or profile_resp.status_code != 200:
-                MarketDataService._last_debug[ticker] = {"source": "finnhub", "status": quote_resp.status_code}
+            ticker_obj = yf.Ticker(ticker_upper)
+            info = ticker_obj.info
+            print(f"DEBUG {ticker_upper}: {info}")
+ 
+            if not info or len(info) == 0:
                 return None
-
-            quote = quote_resp.json()
-            profile = profile_resp.json()
-            metric = metric_resp.json().get("metric", {}) if metric_resp.status_code == 200 else {}
-
-            name = profile.get("name") or ticker
-            current_price = safe_float(quote.get("c"))
-
-            raw_dy = safe_float(metric.get("dividendYield"))
-            dividend_yield = raw_dy / 100.0 if raw_dy is not None else None
-
-            mc_raw = profile.get("marketCapitalization")
-            market_cap = safe_int(mc_raw * 1_000_000) if mc_raw is not None else None
-            if market_cap is not None and market_cap == 0:
-                market_cap = None
-
-            overview = StockOverview(
-                ticker=ticker.upper(),
-                name=name,
-                description=None,
-                sector=None,
-                industry=profile.get("finnhubIndustry"),
-                exchange=profile.get("exchange"),
-                website=profile.get("weburl"),
-                market_cap=market_cap,
-                pe_ratio=safe_float(metric.get("peTTM") or metric.get("peNormalizedAnnual")),
-                dividend_yield=dividend_yield,
-                current_price=current_price,
-                day_high=safe_float(quote.get("h")),
-                day_low=safe_float(quote.get("l")),
-                fifty_two_week_high=safe_float(metric.get("52WeekHigh")),
-                fifty_two_week_low=safe_float(metric.get("52WeekLow")),
-                volume=safe_int(quote.get("v")),
-                previous_close=safe_float(quote.get("pc")),
-                open_price=safe_float(quote.get("o")),
-                eps=safe_float(metric.get("epsTTM") or metric.get("epsBasicExclExtraTTM")),
-                beta=safe_float(metric.get("beta")),
-                avg_volume=safe_int(metric.get("volumeAvg10Days") or metric.get("volumeAvg3months")),
+             
+            current_price = (
+                info.get("currentPrice") or 
+                info.get("regularMarketPrice") or 
+                info.get("regularMarketPreviousClose") or 
+                info.get("previousClose")
             )
-
-            MarketDataService._last_debug[ticker] = {
-                "source": "finnhub",
-                "current_price_before": current_price,
-                "market_cap_before": profile.get("marketCapitalization"),
-                "name_before": name,
-                "symbol_before": ticker,
-            }
-            return overview
-        except Exception as e:
-            MarketDataService._last_debug[ticker] = {"source": "finnhub", "error": str(e)}
-            return None
-
-    @staticmethod
-    def _build_from_yfinance(ticker: str) -> Optional[StockOverview]:
-        """Fallback: use yfinance library (may be rate-limited on cloud IPs)."""
-        try:
-            ticker_obj = yf.Ticker(ticker)
-            fi = {}
-            try:
-                raw = ticker_obj.fast_info
-                fi = {
-                    "currentPrice": safe_float(coalesce(getattr(raw, "currentPrice", None), getattr(raw, "regularMarketPrice", None))),
-                    "previousClose": safe_float(getattr(raw, "previousClose", None)),
-                    "dayHigh": safe_float(getattr(raw, "regularMarketDayHigh", None)),
-                    "dayLow": safe_float(getattr(raw, "regularMarketDayLow", None)),
-                    "open": safe_float(getattr(raw, "regularMarketOpen", None)),
-                    "volume": safe_int(getattr(raw, "last_volume", None)),
-                    "fiftyTwoWeekHigh": safe_float(getattr(raw, "fiftyTwoWeekHigh", None)),
-                    "fiftyTwoWeekLow": safe_float(getattr(raw, "fiftyTwoWeekLow", None)),
-                    "trailingPE": safe_float(getattr(raw, "trailingPE", None)),
-                    "forwardPE": safe_float(getattr(raw, "forwardPE", None)),
-                    "dividendYield": safe_float(getattr(raw, "dividendYield", None)),
-                    "trailingEps": safe_float(getattr(raw, "trailingEps", None)),
-                    "beta": safe_float(getattr(raw, "beta", None)),
-                    "marketCap": safe_int(getattr(raw, "marketCap", None)),
-                    "avgVolume": safe_int(coalesce(getattr(raw, "averageVolume", None), getattr(raw, "averageDailyVolume10Day", None))),
-                }
-                import json as _json
-                logger.info("YFINANCE_TRACE [%s] fast_info keys=%s fi_volume=%s fi_avg_volume=%s last_volume_attr=%s regularMarketVolume_attr=%s",
-                    ticker,
-                    list(raw.keys()) if hasattr(raw, "keys") else "N/A",
-                    fi.get("volume"),
-                    fi.get("avgVolume"),
-                    safe_int(getattr(raw, "last_volume", None)),
-                    safe_int(getattr(raw, "regularMarketVolume", None)),
-                )
-            except Exception as e:
-                logger.warning("YFINANCE_TRACE [%s] fast_info exception: %s", ticker, e)
-                fi = {}
-
-            hist = {}
-            try:
-                df = ticker_obj.history(period="5d")
-                if not df.empty:
-                    last = df.iloc[-1]
-                    hist = {
-                        "currentPrice": safe_float(last.get("Close")),
-                        "dayHigh": safe_float(last.get("High")),
-                        "dayLow": safe_float(last.get("Low")),
-                        "open": safe_float(last.get("Open")),
-                        "volume": safe_int(last.get("Volume")),
-                    }
-                    logger.info("YFINANCE_TRACE [%s] history volume=%s", ticker, hist.get("volume"))
-                    if len(df) >= 2:
-                        hist["previousClose"] = safe_float(df.iloc[-2].get("Close"))
-            except Exception as e:
-                logger.warning("YFINANCE_TRACE [%s] history exception: %s", ticker, e)
-                hist = {}
-
-            info = {}
-            try:
-                raw_info = ticker_obj.info
-                if isinstance(raw_info, dict):
-                    info = raw_info
-                    logger.info("YFINANCE_TRACE [%s] info volume=%s info regularMarketVolume=%s",
-                        ticker, info.get("volume"), info.get("regularMarketVolume"))
-            except Exception as e:
-                logger.warning("YFINANCE_TRACE [%s] info exception: %s", ticker, e)
-                info = {}
-
-            def first(*values):
-                for v in values:
-                    if v is not None:
-                        return v
-                return None
-
-            symbol = info.get("symbol") or ticker
-            name = first(info.get("longName"), info.get("shortName"), ticker)
-            if not symbol:
-                return None
-
-            current_price = first(
-                fi.get("currentPrice"),
-                safe_float(hist.get("currentPrice")),
-                safe_float(info.get("currentPrice")),
-                safe_float(info.get("regularMarketPrice")),
-                safe_float(info.get("regularMarketPreviousClose")),
-                safe_float(info.get("previousClose"))
-            )
-
-            # Priority 1: direct yield fields from info (format varies by exchange)
-            dy_direct = safe_float(first(
-                info.get("dividendYield"),
-                info.get("trailingAnnualDividendYield"),
-            ))
-            if dy_direct is not None:
-                dividend_yield = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
-            # Priority 2: dividendRate/currentPrice → always decimal form
-            if dividend_yield is None:
-                dy_rate = safe_float(info.get("dividendRate"))
-                if dy_rate is not None and current_price is not None and current_price > 0:
-                    dividend_yield = round(dy_rate / current_price, 6)
-            # Priority 3: trailingAnnualDividendRate/currentPrice → always decimal form
-            if dividend_yield is None:
-                dy_rate = safe_float(info.get("trailingAnnualDividendRate"))
-                if dy_rate is not None and current_price is not None and current_price > 0:
-                    dividend_yield = round(dy_rate / current_price, 6)
-            # Priority 4: fast_info dividendYield (format varies by exchange)
-            if dividend_yield is None:
-                dy_direct = safe_float(fi.get("dividendYield"))
-                if dy_direct is not None:
-                    dividend_yield = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
-
+            
+            raw_yield = info.get("dividendYield")
+            dividend_yield = None
+            if raw_yield is not None:
+                val = safe_float(raw_yield)
+                if val is not None:
+                    dividend_yield = val / 100.0
+            
             result = StockOverview(
-                ticker=symbol.upper(),
-                name=name or symbol,
+                ticker=info.get("symbol", ticker_upper).upper(),
+                name=info.get("longName") or info.get("shortName") or ticker_upper,
                 description=info.get("longBusinessSummary"),
                 sector=info.get("sector"),
                 industry=info.get("industry"),
-                exchange=first(info.get("exchange"), info.get("fullExchangeName")),
+                exchange=info.get("exchange") or info.get("fullExchangeName"),
                 website=info.get("website"),
-                market_cap=first(fi.get("marketCap"), safe_int(info.get("marketCap"))),
-                pe_ratio=first(fi.get("trailingPE"), safe_float(info.get("trailingPE")), fi.get("forwardPE"), safe_float(info.get("forwardPE"))),
+                market_cap=safe_int(info.get("marketCap")),
+                pe_ratio=safe_float(info.get("trailingPE") or info.get("forwardPE")),
                 dividend_yield=dividend_yield,
-                current_price=current_price,
-                day_high=first(fi.get("dayHigh"), safe_float(hist.get("dayHigh")), safe_float(info.get("dayHigh")), safe_float(info.get("regularMarketDayHigh"))),
-                day_low=first(fi.get("dayLow"), safe_float(hist.get("dayLow")), safe_float(info.get("dayLow")), safe_float(info.get("regularMarketDayLow"))),
-                fifty_two_week_high=first(fi.get("fiftyTwoWeekHigh"), safe_float(info.get("fiftyTwoWeekHigh"))),
-                fifty_two_week_low=first(fi.get("fiftyTwoWeekLow"), safe_float(info.get("fiftyTwoWeekLow"))),
-                volume=first(fi.get("volume"), safe_int(hist.get("volume")), safe_int(info.get("volume")), safe_int(info.get("regularMarketVolume"))),
-                previous_close=first(fi.get("previousClose"), safe_float(hist.get("previousClose")), safe_float(info.get("previousClose")), safe_float(info.get("regularMarketPreviousClose"))),
-                open_price=first(fi.get("open"), safe_float(hist.get("open")), safe_float(info.get("open")), safe_float(info.get("regularMarketOpen"))),
-                eps=first(fi.get("trailingEps"), safe_float(info.get("trailingEps")), safe_float(info.get("forwardEps"))),
-                beta=first(fi.get("beta"), safe_float(info.get("beta"))),
-                avg_volume=first(
-                    fi.get("avgVolume"),
-                    safe_int(info.get("averageVolume")),
-                    safe_int(info.get("averageDailyVolume10Day")),
-                    safe_int(info.get("averageVolume10days"))
-                ),
+                current_price=safe_float(current_price),
+                day_high=safe_float(info.get("dayHigh") or info.get("regularMarketDayHigh")),
+                day_low=safe_float(info.get("dayLow") or info.get("regularMarketDayLow")),
+                fifty_two_week_high=safe_float(info.get("fiftyTwoWeekHigh")),
+                fifty_two_week_low=safe_float(info.get("fiftyTwoWeekLow")),
+                volume=safe_int(info.get("volume") or info.get("regularMarketVolume")),
+                previous_close=safe_float(info.get("previousClose") or info.get("regularMarketPreviousClose")),
+                open_price=safe_float(info.get("open") or info.get("regularMarketOpen")),
+                eps=safe_float(info.get("trailingEps") or info.get("forwardEps")),
+                beta=safe_float(info.get("beta")),
+                avg_volume=safe_int(info.get("averageVolume") or info.get("averageDailyVolume10Day") or info.get("averageVolume10days"))
             )
-
-            log_vol = result.volume if result else None
-            logger.info("YFINANCE_TRACE [%s] final volume=%s fi_vol=%s hist_vol=%s info_vol=%s info_rmv=%s",
-                ticker, log_vol,
-                fi.get("volume"), hist.get("volume"),
-                info.get("volume"), info.get("regularMarketVolume"))
-
-            MarketDataService._last_debug[ticker] = {
-                "source": "yfinance",
-                "fi_keys": [k for k, v in fi.items() if v is not None],
-                "hist_keys": [k for k, v in hist.items() if v is not None],
-                "info_keys": list(info.keys())[:10] if isinstance(info, dict) else [],
-                "current_price_before": current_price,
-                "market_cap_before": first(fi.get("marketCap"), safe_int(info.get("marketCap"))),
-                "name_before": name,
-                "symbol_before": symbol,
-            }
+            
+            # Save to cache
+            MarketDataService._overview_cache[ticker_upper] = (now, result)
             return result
         except Exception as e:
-            MarketDataService._last_debug[ticker] = {"source": "yfinance", "error": str(e)}
-            return None
-
-    @staticmethod
-    def _sector_from_yahoo_search(ticker: str) -> tuple:
-        """Fetch sector/industry from Yahoo search API (no crumb required, works from cloud IPs)."""
-        try:
-            url = f"https://query2.finance.yahoo.com/v1/finance/search?q={ticker}&quotesCount=1&newsCount=0"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                quotes = data.get("quotes", [])
-                if quotes:
-                    return quotes[0].get("sector"), quotes[0].get("industry")
-        except Exception:
-            pass
-        return None, None
-
-    @staticmethod
-    def get_stock_overview(ticker: str) -> Optional[StockOverview]:
-        ticker_upper = ticker.upper().strip()
-
-        if ticker_upper in MarketDataService._overview_cache:
-            logger.info("CACHE_HIT overview %s", ticker_upper)
-            return MarketDataService._overview_cache[ticker_upper]
-
-        # Try tiers in order
-        overview = None
-        tier_used = None
-
-        # Tier 1: Finnhub
-        overview = MarketDataService._build_from_finnhub(ticker_upper)
-        if overview and overview.current_price is not None:
-            tier_used = "finnhub"
-
-        if tier_used is None:
-            # Tier 2: Yahoo Direct
-            overview = MarketDataService._build_from_yahoo_direct(ticker_upper)
-            if overview and overview.current_price is not None:
-                tier_used = "yahoo_direct"
-
-        if tier_used is None:
-            # Tier 3: yfinance
-            overview = MarketDataService._build_from_yfinance(ticker_upper)
-            if overview and overview.current_price is not None:
-                tier_used = "yfinance"
-
-        if tier_used is None:
-            logger.warning("VOLUME_TRACE [%s] ALL TIERS FAILED", ticker)
-            return None
-
-        # Universal backfill: sector/industry from Yahoo search (no crumb needed)
-        if overview.sector is None or overview.industry is None:
-            try:
-                sector, industry = MarketDataService._sector_from_yahoo_search(ticker_upper)
-                if sector:
-                    overview.sector = sector
-                if industry:
-                    overview.industry = industry
-            except Exception:
-                pass
-
-        # Universal backfill: volume/market_cap/PE/EPS from fast_info (no crumb needed)
-        if overview.volume is None or overview.market_cap is None or overview.pe_ratio is None or overview.eps is None:
-            try:
-                yf_ticker = yf.Ticker(ticker_upper)
-                fi = yf_ticker.fast_info
-                fi_dict = dict(fi)
-                if overview.volume is None:
-                    vol = safe_int(fi_dict.get("lastVolume") or getattr(fi, "last_volume", None))
-                    if vol is not None:
-                        overview.volume = vol
-                if overview.market_cap is None:
-                    mc = safe_int(fi_dict.get("marketCap"))
-                    if mc is not None:
-                        overview.market_cap = mc
-                if overview.pe_ratio is None:
-                    pe = safe_float(fi_dict.get("trailingPE"))
-                    if pe is not None:
-                        overview.pe_ratio = pe
-                if overview.eps is None:
-                    eps = safe_float(fi_dict.get("trailingEps"))
-                    if eps is not None:
-                        overview.eps = eps
-                logger.warning(
-                    "FUNDAMENTAL_SOURCE=fast_info ticker=%s volume=%s market_cap=%s pe=%s eps=%s",
-                    ticker_upper, overview.volume, overview.market_cap,
-                    overview.pe_ratio, overview.eps,
-                )
-            except Exception:
-                pass
-
-        # Universal backfill: PE/EPS/dividend_yield/website from Finnhub (no Yahoo dependency)
-        if overview.pe_ratio is None or overview.eps is None or overview.dividend_yield is None or overview.website is None:
-            try:
-                api_key = settings.FINNHUB_API_KEY
-                if not api_key:
-                    pass
-                else:
-                    # Step 1: Finnhub metric endpoint (peTTM, epsTTM, dividendYield)
-                    if overview.pe_ratio is None or overview.eps is None or overview.dividend_yield is None:
-                        url = f"https://finnhub.io/api/v1/stock/metric?symbol={ticker_upper}&metric=all&token={api_key}"
-                        resp = requests.get(url, timeout=10)
-                        if resp.status_code == 200:
-                            metric = resp.json().get("metric", {})
-                            pe = safe_float(metric.get("peTTM") or metric.get("peNormalizedAnnual"))
-                            eps = safe_float(metric.get("epsTTM") or metric.get("epsBasicExclExtraTTM"))
-                            if pe is not None and overview.pe_ratio is None:
-                                overview.pe_ratio = pe
-                            if eps is not None and overview.eps is None:
-                                overview.eps = eps
-                            dy = safe_float(metric.get("dividendYield"))
-                            if dy is not None and overview.dividend_yield is None:
-                                overview.dividend_yield = dy / 100.0
-                            logger.warning(
-                                "FUNDAMENTAL_SOURCE=finnhub_metric ticker=%s PE_COMPUTED=%s EPS_COMPUTED=%s DY_COMPUTED=%s",
-                                ticker_upper, pe, eps, dy,
-                            )
-
-                    # Step 2: Finnhub earnings endpoint (trailing EPS, compute PE from price)
-                    if overview.pe_ratio is None or overview.eps is None:
-                        url = f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker_upper}&token={api_key}"
-                        resp = requests.get(url, timeout=10)
-                        if resp.status_code == 200:
-                            earnings_data = resp.json()
-                            if isinstance(earnings_data, list) and len(earnings_data) > 0:
-                                earnings_data = sorted(
-                                    earnings_data,
-                                    key=lambda x: x.get("period", ""),
-                                    reverse=True,
-                                )
-                                logger.info(
-                                    "EARNINGS_BACKFILL ticker=%s periods=%s actuals=%s",
-                                    ticker_upper,
-                                    [e.get("period") for e in earnings_data[:4]],
-                                    [safe_float(e.get("actual")) for e in earnings_data[:4]],
-                                )
-                                valid_eps = []
-                                for er in earnings_data:
-                                    actual = safe_float(er.get("actual"))
-                                    if actual is not None:
-                                        valid_eps.append(actual)
-                                    if len(valid_eps) >= 4:
-                                        break
-                                trailing_eps = sum(valid_eps)
-                                count = len(valid_eps)
-                                if count >= 4:
-                                    eps_val = round(trailing_eps, 2)
-                                elif count > 0:
-                                    eps_val = round((trailing_eps / count) * 4, 2)
-                                else:
-                                    eps_val = None
-                                if eps_val is not None and overview.eps is None:
-                                    overview.eps = eps_val
-                                if (
-                                    eps_val is not None
-                                    and overview.current_price
-                                    and overview.current_price > 0
-                                ):
-                                    overview.pe_ratio = round(
-                                        overview.current_price / eps_val,
-                                        2,
-                                    )
-                                logger.info(
-                                    "PE_COMPUTED ticker=%s eps=%s pe=%s",
-                                    ticker_upper,
-                                    eps_val,
-                                    overview.pe_ratio,
-                                )
-                                logger.warning(
-                                    "FUNDAMENTAL_SOURCE=finnhub_earnings ticker=%s quarters=%s EPS_COMPUTED=%s PE_COMPUTED=%s",
-                                    ticker_upper,
-                                    count,
-                                    eps_val,
-                                    overview.pe_ratio,
-                                )
-
-                    # Step 3: Finnhub profile2 for website
-                    if overview.website is None:
-                        url = f"https://finnhub.io/api/v1/stock/profile2?symbol={ticker_upper}&token={api_key}"
-                        resp = requests.get(url, timeout=10)
-                        if resp.status_code == 200:
-                            profile = resp.json()
-                            overview.website = profile.get("weburl") or overview.website
-                            if overview.industry is None:
-                                overview.industry = profile.get("finnhubIndustry") or overview.industry
-                            logger.warning(
-                                "FUNDAMENTAL_SOURCE=finnhub_profile ticker=%s website=%s industry=%s",
-                                ticker_upper, overview.website, overview.industry,
-                            )
-            except Exception:
-                pass
-
-        # Step 4: Backfill dividend_yield from yfinance (if still missing after Finnhub)
-        #
-        # Field sources and their formats:
-        #   info.dividendYield / info.trailingAnnualDividendYield  → decimal (0.0099)
-        #   info.dividendRate / info.trailingAnnualDividendRate     → dollars; divide by price
-        #   fast_info.dividendYield                                 → percentage (0.99); must /100
-        #
-        if overview.dividend_yield is None:
-            try:
-                yf_ticker = yf.Ticker(ticker_upper)
-                info = {}
-                try:
-                    raw_info = yf_ticker.info
-                    if isinstance(raw_info, dict):
-                        info = raw_info
-                except Exception:
-                    info = {}
-
-                # Priority 1: info dividendYield fields (format varies by exchange)
-                dy_direct = safe_float(coalesce(
-                    info.get("dividendYield"),
-                    info.get("trailingAnnualDividendYield"),
-                ))
-                if dy_direct is not None:
-                    dy = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
-                # Priority 2: dividendRate/currentPrice → always decimal form
-                if dy is None:
-                    dy_rate = safe_float(info.get("dividendRate"))
-                    if dy_rate is not None and overview.current_price is not None and overview.current_price > 0:
-                        dy = round(dy_rate / overview.current_price, 6)
-                # Priority 3: trailingAnnualDividendRate/currentPrice → always decimal form
-                if dy is None:
-                    dy_rate = safe_float(info.get("trailingAnnualDividendRate"))
-                    if dy_rate is not None and overview.current_price is not None and overview.current_price > 0:
-                        dy = round(dy_rate / overview.current_price, 6)
-                # Priority 4: fast_info dividendYield (format varies by exchange)
-                if dy is None:
-                    fi = yf_ticker.fast_info
-                    fi_dict = dict(fi)
-                    dy_direct = safe_float(fi_dict.get("dividendYield"))
-                    if dy_direct is not None:
-                        dy = dy_direct / 100.0 if dy_direct > 0.2 else dy_direct
-                if dy is not None:
-                    overview.dividend_yield = dy
-                    logger.warning(
-                        "FUNDAMENTAL_SOURCE=yfinance_dy_backfill ticker=%s DY_COMPUTED=%s",
-                        ticker_upper, dy,
-                    )
-            except Exception:
-                pass
-
-        logger.warning(
-            "OVERVIEW_TRACE %s",
-            {
-                "ticker": ticker,
-                "tier": tier_used,
-                "sector": overview.sector,
-                "industry": overview.industry,
-                "market_cap": overview.market_cap,
-                "pe_ratio": overview.pe_ratio,
-                "eps": overview.eps,
-                "website": overview.website,
-                "volume": overview.volume,
-            }
-        )
-        if overview:
-            MarketDataService._overview_cache[ticker_upper] = overview
-            logger.info("CACHE_STORE overview %s", ticker_upper)
-        return overview
-
-    @staticmethod
-    def _build_history_from_finnhub(ticker: str, period: str) -> Optional[List[StockHistoryPoint]]:
-        api_key = settings.FINNHUB_API_KEY
-        if not api_key:
-            return None
-
-        now_ts = int(datetime.now().timestamp())
-        period_days = {"1m": 31, "6m": 183, "1y": 365, "5y": 1825}
-        resolution = "D" if period != "5y" else "W"
-        from_ts = now_ts - period_days.get(period, 31) * 86400
-
-        try:
-            resp = requests.get(
-                f"https://finnhub.io/api/v1/stock/candle"
-                f"?symbol={ticker}&resolution={resolution}"
-                f"&from={from_ts}&to={now_ts}&token={api_key}",
-                timeout=10,
-            )
-            if resp.status_code != 200:
-                return None
-
-            data = resp.json()
-            if data.get("s") != "ok":
-                return None
-
-            closes = data.get("c", [])
-            highs = data.get("h", [])
-            lows = data.get("l", [])
-            opens = data.get("o", [])
-            volumes = data.get("v", [])
-            timestamps = data.get("t", [])
-
-            points = []
-            for i in range(len(timestamps)):
-                dt = datetime.fromtimestamp(timestamps[i])
-                points.append(StockHistoryPoint(
-                    date=dt.strftime("%Y-%m-%d"),
-                    open=safe_float(opens[i]) if i < len(opens) else 0.0,
-                    high=safe_float(highs[i]) if i < len(highs) else 0.0,
-                    low=safe_float(lows[i]) if i < len(lows) else 0.0,
-                    close=safe_float(closes[i]) if i < len(closes) else 0.0,
-                    volume=safe_int(volumes[i]) if i < len(volumes) else 0,
-                ))
-
-            return points if points else None
-        except Exception:
-            return None
-
-    @staticmethod
-    def _build_history_from_yahoo_direct(ticker: str, period: str) -> Optional[List[StockHistoryPoint]]:
-        period_map = {
-            "1m": ("1mo", "1d"),
-            "6m": ("6mo", "1d"),
-            "1y": ("1y", "1d"),
-            "5y": ("5y", "1wk"),
-        }
-        yf_period, yf_interval = period_map.get(period, ("1mo", "1d"))
-
-        try:
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={yf_period}&interval={yf_interval}"
-            resp = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
-            if resp.status_code != 200:
-                return None
-
-            data = resp.json()
-            result = data.get("chart", {}).get("result")
-            if not result or not isinstance(result, list) or len(result) == 0:
-                return None
-
-            chart = result[0]
-            timestamps = chart.get("timestamp", [])
-            quotes = chart.get("indicators", {}).get("quote", [])
-            if not quotes:
-                return None
-
-            quote = quotes[0]
-            opens = quote.get("open", [])
-            highs = quote.get("high", [])
-            lows = quote.get("low", [])
-            closes = quote.get("close", [])
-            volumes = quote.get("volume", [])
-
-            points = []
-            for i, ts in enumerate(timestamps):
-                dt = datetime.fromtimestamp(ts)
-                points.append(StockHistoryPoint(
-                    date=dt.strftime("%Y-%m-%d"),
-                    open=safe_float(opens[i]) if i < len(opens) and opens[i] is not None else 0.0,
-                    high=safe_float(highs[i]) if i < len(highs) and highs[i] is not None else 0.0,
-                    low=safe_float(lows[i]) if i < len(lows) and lows[i] is not None else 0.0,
-                    close=safe_float(closes[i]) if i < len(closes) and closes[i] is not None else 0.0,
-                    volume=safe_int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
-                ))
-
-            return points if points else None
-        except Exception:
-            return None
-
-    @staticmethod
-    def _build_history_from_yfinance(ticker: str, period: str) -> Optional[List[StockHistoryPoint]]:
-        period_map = {
-            "1m": ("1mo", "1d"),
-            "6m": ("6mo", "1d"),
-            "1y": ("1y", "1d"),
-            "5y": ("5y", "1wk"),
-        }
-        yf_period, yf_interval = period_map.get(period, ("1mo", "1d"))
-
-        try:
-            ticker_obj = yf.Ticker(ticker)
-            df = ticker_obj.history(period=yf_period, interval=yf_interval)
-            if df.empty:
-                return None
-
-            points = []
-            for date_index, row in df.iterrows():
-                date_str = date_index.strftime("%Y-%m-%d")
-                points.append(StockHistoryPoint(
-                    date=date_str,
-                    open=safe_float(row.get("Open")) or 0.0,
-                    high=safe_float(row.get("High")) or 0.0,
-                    low=safe_float(row.get("Low")) or 0.0,
-                    close=safe_float(row.get("Close")) or 0.0,
-                    volume=safe_int(row.get("Volume")) or 0,
-                ))
-            return points if points else None
-        except Exception:
+            print(f"Error fetching stock overview for {ticker_upper}: {e}")
             return None
 
     @staticmethod
@@ -891,597 +212,85 @@ class MarketDataService:
         ticker_upper = ticker.upper().strip()
         cache_key = (ticker_upper, period)
         now = datetime.now()
-
+        
+        # Check cache (5 minutes TTL)
         if cache_key in MarketDataService._history_cache:
             cache_time, cached_data = MarketDataService._history_cache[cache_key]
             if (now - cache_time).total_seconds() < 300:
                 return cached_data
-
-        # Tier 1: Finnhub
-        points = MarketDataService._build_history_from_finnhub(ticker_upper, period)
-        if points:
-            MarketDataService._history_cache[cache_key] = (now, points)
-            return points
-
-        # Tier 2: Direct Yahoo HTTP
-        points = MarketDataService._build_history_from_yahoo_direct(ticker_upper, period)
-        if points:
-            MarketDataService._history_cache[cache_key] = (now, points)
-            return points
-
-        # Tier 3: yfinance fallback
-        points = MarketDataService._build_history_from_yfinance(ticker_upper, period)
-        if points:
-            MarketDataService._history_cache[cache_key] = (now, points)
-            return points
-
-        return []
+                
+        period_map = {
+            "1m": ("1mo", "1d"),
+            "6m": ("6mo", "1d"),
+            "1y": ("1y", "1d"),
+            "5y": ("5y", "1wk")
+        }
+        
+        yf_period, yf_interval = period_map.get(period, ("1mo", "1d"))
+        
+        try:
+            ticker_obj = yf.Ticker(ticker_upper)
+            df = ticker_obj.history(period=yf_period, interval=yf_interval)
+            
+            if df.empty:
+                return []
+                
+            history_points = []
+            for date_index, row in df.iterrows():
+                date_str = date_index.strftime('%Y-%m-%d')
+                
+                history_points.append(StockHistoryPoint(
+                    date=date_str,
+                    open=safe_float(row.get('Open')) or 0.0,
+                    high=safe_float(row.get('High')) or 0.0,
+                    low=safe_float(row.get('Low')) or 0.0,
+                    close=safe_float(row.get('Close')) or 0.0,
+                    volume=safe_int(row.get('Volume')) or 0
+                ))
+                
+            # Save to cache
+            MarketDataService._history_cache[cache_key] = (now, history_points)
+            return history_points
+        except Exception as e:
+            print(f"Error fetching history for {ticker}: {e}")
+            return []
 
     @staticmethod
     def get_stock_news(ticker: str) -> List[StockNewsArticle]:
         ticker_upper = ticker.upper().strip()
-
+        now = datetime.now()
+        
+        # Check cache (60 seconds TTL)
         if ticker_upper in MarketDataService._news_cache:
-            logger.info("CACHE_HIT news %s", ticker_upper)
-            return MarketDataService._news_cache[ticker_upper]
+            cache_time, cached_data = MarketDataService._news_cache[ticker_upper]
+            if (now - cache_time).total_seconds() < 60:
+                return cached_data
                 
         try:
             ticker_obj = yf.Ticker(ticker_upper)
             news = ticker_obj.news
             
             if not news:
-                logger.warning("No news returned by yfinance for %s", ticker_upper)
                 return []
                 
             articles = []
             for article in news:
-                content = article.get("content") or {}
-                
-                # New schema: content.title, content.canonicalUrl.url, content.pubDate, content.provider.displayName
-                title = content.get("title") or article.get("title")
-                publisher = (
-                    content.get("provider", {}).get("displayName")
-                    or article.get("publisher")
-                    or "Unknown"
-                )
-                link = (
-                    content.get("canonicalUrl", {}).get("url")
-                    or content.get("clickThroughUrl", {}).get("url")
-                    or article.get("link")
-                )
-                
-                # Parse published_at: new schema uses pubDate string, old uses epoch int
-                pub_date_str = content.get("pubDate")
+                title = article.get("title")
+                publisher = article.get("publisher") or "Unknown"
+                link = article.get("link")
                 published_at = article.get("providerPublishTime")
-                if pub_date_str and not published_at:
-                    try:
-                        dt = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
-                        published_at = int(dt.timestamp())
-                    except (ValueError, TypeError):
-                        try:
-                            dt = datetime.strptime(pub_date_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S%z")
-                            published_at = int(dt.timestamp())
-                        except (ValueError, TypeError):
-                            pass
                 
                 if title and link and published_at:
-                    text = title
-                    summary = content.get("summary")
-                    if summary:
-                        text = title + " " + summary
-                    sentiment_label = None
-                    sentiment_score = None
-                    if _HAS_VADER and text:
-                        scores = _vader.polarity_scores(text)
-                        compound = scores["compound"]
-                        if compound >= 0.05:
-                            sentiment_label = "Positive"
-                        elif compound <= -0.05:
-                            sentiment_label = "Negative"
-                        else:
-                            sentiment_label = "Neutral"
-                        sentiment_score = round(compound, 2)
-                        logger.info(
-                            "NEWS_SENTIMENT ticker=%s score=%s label=%s",
-                            ticker_upper, sentiment_score, sentiment_label,
-                        )
                     articles.append(StockNewsArticle(
                         title=title,
                         publisher=publisher,
                         link=link,
-                        published_at=published_at,
-                        sentiment_label=sentiment_label,
-                        sentiment_score=sentiment_score,
+                        published_at=published_at
                     ))
             
-            logger.info("Fetched %d news articles for %s", len(articles), ticker_upper)
-            
-            MarketDataService._news_cache[ticker_upper] = articles
-            logger.info("CACHE_STORE news %s", ticker_upper)
+            # Save to cache
+            MarketDataService._news_cache[ticker_upper] = (now, articles)
             return articles
-        except YFRateLimitError:
-            logger.warning("NEWS_RATE_LIMIT ticker=%s", ticker_upper)
-            if ticker_upper in MarketDataService._news_cache:
-                logger.info("NEWS_CACHE_FALLBACK ticker=%s", ticker_upper)
-                return MarketDataService._news_cache[ticker_upper]
-            return []
         except Exception as e:
-            logger.error("Error fetching news for %s: %s", ticker_upper, e, exc_info=True)
+            print(f"Error fetching news for {ticker_upper}: {e}")
             return []
-
-    @staticmethod
-    def get_stock_earnings(ticker: str) -> Optional[Dict[str, Any]]:
-        ticker_upper = ticker.upper().strip()
-
-        if ticker_upper in MarketDataService._earnings_cache:
-            logger.info("CACHE_HIT earnings %s", ticker_upper)
-            return MarketDataService._earnings_cache[ticker_upper]
-
-        result = None
-        result = MarketDataService._build_earnings_from_finnhub(ticker_upper)
-        if not result:
-            result = MarketDataService._build_earnings_from_yahoo_direct(ticker_upper)
-        if not result:
-            result = MarketDataService._build_earnings_from_yfinance(ticker_upper)
-
-        if result:
-            MarketDataService._earnings_cache[ticker_upper] = result
-            logger.info("CACHE_STORE earnings %s", ticker_upper)
-            return result
-
-        logger.warning("All earnings tiers exhausted for %s", ticker_upper)
-        return None
-
-    @staticmethod
-    def _build_earnings_from_finnhub(ticker: str) -> Optional[Dict[str, Any]]:
-        api_key = settings.FINNHUB_API_KEY
-        if not api_key:
-            return None
-
-        # Historical earnings
-        try:
-            url_hist = f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker}&token={api_key}"
-            earnings_resp = requests.get(url_hist, timeout=10)
-            if earnings_resp.status_code != 200:
-                logger.warning("Finnhub earnings API returned %s for %s", earnings_resp.status_code, ticker)
-                return None
-
-            earnings_data = earnings_resp.json()
-            if not isinstance(earnings_data, list):
-                logger.warning("Finnhub earnings response not a list for %s", ticker)
-                return None
-
-            if not earnings_data:
-                logger.warning("Finnhub earnings empty list for %s", ticker)
-                return None
-        except Exception:
-            logger.exception("Finnhub earnings API request failed for %s", ticker)
-            return None
-
-        prev_eps = None
-        surprise = None
-        for er in earnings_data:
-            actual = safe_float(er.get("actual"))
-            if actual is not None:
-                prev_eps = actual
-            if surprise is None:
-                surprise = safe_float(er.get("surprise"))
-
-        # Earnings calendar (isolated - failure won't cascade)
-        next_date = None
-        revenue_est = None
-        eps_est = None
-        try:
-            from datetime import timedelta
-            today = datetime.now()
-            from_date = today.strftime("%Y-%m-%d")
-            to_date = (today + timedelta(days=90)).strftime("%Y-%m-%d")
-
-            url_cal = (
-                f"https://finnhub.io/api/v1/calendar/earnings"
-                f"?symbol={ticker}&from={from_date}&to={to_date}&token={api_key}"
-            )
-            cal_resp = requests.get(url_cal, timeout=10)
-            if cal_resp.status_code == 200:
-                cal_data = cal_resp.json()
-                cal_entries = cal_data.get("earningsCalendar", []) if isinstance(cal_data, dict) else []
-                if cal_entries:
-                    entry = cal_entries[0]
-                    date_str = entry.get("date")
-                    if date_str:
-                        try:
-                            dt = datetime.strptime(date_str, "%Y-%m-%d")
-                            next_date = dt.strftime("%b %d, %Y")
-                        except (ValueError, AttributeError):
-                            pass
-                    eps_est = safe_float(entry.get("epsEstimate"))
-                    raw_rev = entry.get("revenueEstimate")
-                    revenue_est = safe_float(raw_rev * 1_000_000) if raw_rev is not None else None
-        except Exception:
-            logger.warning("Finnhub earnings calendar request failed for %s", ticker)
-
-        if next_date is None and prev_eps is None and eps_est is None:
-            logger.warning("Finnhub returned no earnings data for %s", ticker)
-            return None
-
-        return {
-            "next_earnings_date": next_date,
-            "revenue_estimate": revenue_est,
-            "eps_estimate": eps_est,
-            "previous_eps": prev_eps,
-            "earnings_surprise": surprise,
-        }
-
-    @staticmethod
-    def _build_earnings_from_yahoo_direct(ticker: str) -> Optional[Dict[str, Any]]:
-        try:
-            y_session = requests.Session()
-            y_session.headers.update({"User-Agent": YAHOO_HEADERS["User-Agent"]})
-            y_session.get("https://fc.yahoo.com/", timeout=10)
-            crumb_resp = y_session.get(
-                "https://query2.finance.yahoo.com/v1/test/getcrumb",
-                timeout=10,
-            )
-            if crumb_resp.status_code != 200:
-                logger.warning("Yahoo crumb acquisition failed for %s", ticker)
-                return None
-
-            crumb = crumb_resp.text.strip()
-
-            url = (
-                f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
-                f"?modules=calendarEvents,earnings,earningsHistory&crumb={crumb}"
-            )
-            resp = y_session.get(url, timeout=15)
-            if resp.status_code != 200:
-                logger.warning("Yahoo quoteSummary returned %s for %s", resp.status_code, ticker)
-                return None
-
-            data = resp.json()
-            result = data.get("quoteSummary", {}).get("result", [])
-            if not result:
-                return None
-
-            quote = result[0]
-
-            calendar = quote.get("calendarEvents", {}).get("earnings", {})
-            earnings_dates = calendar.get("earningsDate", [])
-            next_date = None
-            if earnings_dates:
-                try:
-                    ts = earnings_dates[0].get("raw")
-                    if ts:
-                        next_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%b %d, %Y")
-                except (ValueError, OSError, TypeError):
-                    pass
-            eps_est = safe_float(calendar.get("earningsAverage", {}).get("raw"))
-
-            earnings = quote.get("earnings", {})
-            quarterly = earnings.get("earningsChart", {}).get("quarterly", [])
-            prev_eps = None
-            if quarterly:
-                prev_eps = safe_float(quarterly[0].get("actual", {}).get("raw"))
-
-            surprise = None
-            earnings_history = quote.get("earningsHistory", {}).get("history", [])
-            if earnings_history:
-                last_item = earnings_history[-1]
-                surprise = safe_float(last_item.get("epsDifference", {}).get("raw"))
-
-            if next_date is None and prev_eps is None and eps_est is None:
-                return None
-
-            return {
-                "next_earnings_date": next_date,
-                "revenue_estimate": None,
-                "eps_estimate": eps_est,
-                "previous_eps": prev_eps,
-                "earnings_surprise": surprise,
-            }
-        except Exception:
-            logger.exception("Yahoo earnings request failed for %s", ticker)
-            return None
-
-    @staticmethod
-    def _build_earnings_from_yfinance(ticker: str) -> Optional[Dict[str, Any]]:
-        try:
-            ticker_obj = yf.Ticker(ticker)
-            info = ticker_obj.info
-            if not info or not isinstance(info, dict):
-                logger.warning("yfinance info not a dict for %s", ticker)
-                return None
-            if not info.get("symbol"):
-                logger.warning("yfinance info has no symbol for %s", ticker)
-                return None
-
-            next_date = None
-            ts = info.get("earningsTimestamp")
-            if ts:
-                try:
-                    next_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%b %d, %Y")
-                except (ValueError, OSError):
-                    pass
-
-            revenue_est = safe_float(info.get("totalRevenue")) or safe_float(info.get("revenueEstimate"))
-            eps_est = safe_float(info.get("epsForward") or info.get("forwardEps"))
-            prev_eps = safe_float(info.get("trailingEps"))
-
-            surprise = None
-            try:
-                earnings = ticker_obj.earnings
-                if earnings is not None and not earnings.empty:
-                    last_item = earnings.iloc[-1]
-                    surprise = safe_float(last_item.get("surprise"))
-            except yf.exceptions.YFRateLimitError:
-                logger.warning("yfinance earnings rate-limited for %s", ticker)
-            except Exception:
-                logger.warning("yfinance earnings extraction failed for %s", ticker)
-
-            if next_date is None and prev_eps is None and eps_est is None:
-                logger.warning("yfinance returned no earnings data for %s", ticker)
-                return None
-
-            return {
-                "next_earnings_date": next_date,
-                "revenue_estimate": revenue_est,
-                "eps_estimate": eps_est,
-                "previous_eps": prev_eps,
-                "earnings_surprise": surprise,
-            }
-        except yf.exceptions.YFRateLimitError:
-            logger.warning("yfinance rate-limited for %s", ticker)
-            return None
-        except Exception:
-            logger.exception("yfinance earnings request failed for %s", ticker)
-            return None
-
-    @staticmethod
-    def get_stock_technical(ticker: str) -> Optional[Dict[str, Any]]:
-        ticker_upper = ticker.upper().strip()
-
-        if ticker_upper in MarketDataService._technical_cache:
-            logger.info("CACHE_HIT technical %s", ticker_upper)
-            return MarketDataService._technical_cache[ticker_upper]
-
-        try:
-            import pandas as pd
-            import numpy as np
-
-            ticker_obj = yf.Ticker(ticker_upper)
-            df = ticker_obj.history(period="1y")
-            df = df[df["Close"].notna()].copy()
-            if df.empty or len(df) < 50:
-                logger.warning("Insufficient history for technicals on %s", ticker_upper)
-                return None
-
-            close = df["Close"].astype(float)
-            high = df["High"].astype(float)
-            low = df["Low"].astype(float)
-
-            current_price = safe_float(close.iloc[-1])
-
-            # RSI(14)
-            delta = close.diff()
-            gain = delta.where(delta > 0, 0.0)
-            loss = (-delta.where(delta < 0, 0.0))
-            avg_gain = gain.rolling(14).mean()
-            avg_loss = loss.rolling(14).mean()
-            rs = avg_gain / avg_loss.replace(0, np.nan)
-            rsi = 100 - (100 / (1 + rs))
-            rsi_val = safe_float(rsi.iloc[-1])
-
-            # EMA20, EMA50
-            ema20 = safe_float(close.ewm(span=20, adjust=False).mean().iloc[-1])
-            ema50 = safe_float(close.ewm(span=50, adjust=False).mean().iloc[-1])
-
-            # SMA200
-            sma200_val = None
-            if len(df) >= 200:
-                sma200_val = safe_float(close.rolling(200).mean().iloc[-1])
-
-            # MACD (12,26,9)
-            ema12 = close.ewm(span=12, adjust=False).mean()
-            ema26 = close.ewm(span=26, adjust=False).mean()
-            macd_line = ema12 - ema26
-            signal_line = macd_line.ewm(span=9, adjust=False).mean()
-            histogram = macd_line - signal_line
-            macd_val = safe_float(macd_line.iloc[-1])
-            signal_val = safe_float(signal_line.iloc[-1])
-            hist_val = safe_float(histogram.iloc[-1])
-
-            # Bollinger Bands (20,2)
-            sma20 = close.rolling(20).mean()
-            std20 = close.rolling(20).std()
-            bb_upper = safe_float((sma20 + 2 * std20).iloc[-1])
-            bb_middle = safe_float(sma20.iloc[-1])
-            bb_lower = safe_float((sma20 - 2 * std20).iloc[-1])
-
-            # ATR(14)
-            prev_close = close.shift(1)
-            tr = pd.concat([
-                high - low,
-                (high - prev_close).abs(),
-                (low - prev_close).abs(),
-            ], axis=1).max(axis=1)
-            atr_val = safe_float(tr.rolling(14).mean().iloc[-1])
-
-            result = {
-                "ticker": ticker_upper,
-                "current_price": current_price,
-                "rsi": rsi_val,
-                "ema20": ema20,
-                "ema50": ema50,
-                "sma200": sma200_val,
-                "macd": {
-                    "macd": macd_val,
-                    "signal": signal_val,
-                    "histogram": hist_val,
-                },
-                "bollinger": {
-                    "upper": bb_upper,
-                    "middle": bb_middle,
-                    "lower": bb_lower,
-                },
-                "atr": atr_val,
-            }
-
-            MarketDataService._technical_cache[ticker_upper] = result
-            logger.info("CACHE_STORE technical %s", ticker_upper)
-            return result
-
-        except YFRateLimitError:
-            logger.warning("TECHNICAL_RATE_LIMIT ticker=%s", ticker_upper)
-            if ticker_upper in MarketDataService._technical_cache:
-                logger.info("TECHNICAL_CACHE_FALLBACK ticker=%s", ticker_upper)
-                return MarketDataService._technical_cache[ticker_upper]
-            return None
-        except Exception as e:
-            logger.error("Error computing technicals for %s: %s", ticker_upper, e)
-            return None
-
-    @staticmethod
-    def get_stock_recommendation(ticker: str) -> Optional[Dict[str, Any]]:
-        ticker_upper = ticker.upper().strip()
-
-        technical = MarketDataService.get_stock_technical(ticker_upper)
-
-        from app.services.sentiment import SentimentService
-        sentiment_label = "neutral"
-        sentiment_score_val = 0.0
-        news = None
-        try:
-            news = MarketDataService.get_stock_news(ticker_upper)
-        except Exception:
-            logger.warning("RECOMMENDATION_NEWS_FAILED ticker=%s", ticker_upper)
-        if news:
-            _, sentiment_score_val, _ = SentimentService.analyze_news_list(news)
-
-        reasons = []
-        tech_score = 50
-
-        # Technical scoring
-        if technical:
-            price = technical.get("current_price")
-            rsi = technical.get("rsi")
-            ema20 = technical.get("ema20")
-            ema50 = technical.get("ema50")
-            sma200 = technical.get("sma200")
-            macd = technical.get("macd", {})
-            bb = technical.get("bollinger", {})
-
-            # RSI
-            if rsi is not None:
-                if rsi < 30:
-                    tech_score += 25
-                    reasons.append(f"RSI at {rsi:.1f} — oversold territory suggests upside potential")
-                elif rsi < 40:
-                    tech_score += 10
-                    reasons.append(f"RSI at {rsi:.1f} — approaching oversold level")
-                elif rsi > 70:
-                    tech_score -= 25
-                    reasons.append(f"RSI at {rsi:.1f} — overbought territory suggests caution")
-                else:
-                    reasons.append(f"RSI at {rsi:.1f} — neutral momentum")
-
-            # Trend vs EMAs/SMA
-            if price is not None and ema20 is not None and price > ema20:
-                tech_score += 10
-                reasons.append(f"Price above 20-day EMA — short-term bullish")
-            if price is not None and ema50 is not None and price > ema50:
-                tech_score += 15
-                reasons.append(f"Price above 50-day EMA — medium-term bullish")
-            if price is not None and sma200 is not None and price > sma200:
-                tech_score += 20
-                reasons.append(f"Price above 200-day SMA — long-term bullish trend intact")
-
-            # MACD
-            macd_val = macd.get("macd")
-            signal_val = macd.get("signal")
-            if macd_val is not None and signal_val is not None:
-                if macd_val > signal_val:
-                    tech_score += 15
-                    reasons.append("MACD above signal line — bullish momentum")
-                else:
-                    tech_score -= 15
-                    reasons.append("MACD below signal line — bearish momentum")
-
-            # Bollinger Bands
-            bb_lower = bb.get("lower")
-            bb_upper = bb.get("upper")
-            if price is not None and bb_lower is not None and bb_upper is not None:
-                if price <= bb_lower * 1.02:
-                    tech_score += 10
-                    reasons.append("Price near lower Bollinger Band — potential bounce zone")
-                elif price >= bb_upper * 0.98:
-                    tech_score -= 10
-                    reasons.append("Price near upper Bollinger Band — extended move")
-
-            tech_score = max(0, min(100, tech_score))
-
-            reasons.append(f"Technical score: {tech_score}/100")
-        else:
-            reasons.append("Technical data unavailable — scoring based on sentiment only")
-
-        # Sentiment scoring
-        if sentiment_score_val >= 0.5:
-            sent_score = 100
-            sentiment_label = "very_positive"
-        elif sentiment_score_val >= 0.15:
-            sent_score = 75
-            sentiment_label = "positive"
-        elif sentiment_score_val > -0.15:
-            sent_score = 50
-            sentiment_label = "neutral"
-        elif sentiment_score_val > -0.5:
-            sent_score = 25
-            sentiment_label = "negative"
-        else:
-            sent_score = 0
-            sentiment_label = "very_negative"
-
-        reasons.append(f"News sentiment: {sentiment_label.replace('_', ' ')} ({sentiment_score_val:+.2f})")
-
-        # Final score: 70% technical, 30% sentiment
-        final_score = round(tech_score * 0.7 + sent_score * 0.3)
-
-        # Signal mapping
-        if final_score >= 80:
-            signal = "STRONG BUY"
-            strength = "High"
-        elif final_score >= 65:
-            signal = "BUY"
-            strength = "Moderate"
-        elif final_score >= 45:
-            signal = "HOLD"
-            strength = "Neutral"
-        elif final_score >= 25:
-            signal = "SELL"
-            strength = "Moderate"
-        else:
-            signal = "STRONG SELL"
-            strength = "High"
-
-        # Risk level
-        risk_level = "Low"
-        if technical:
-            atr_val = technical.get("atr")
-            price = technical.get("current_price")
-            if atr_val is not None and price is not None and price > 0:
-                atr_pct = atr_val / price * 100
-                if atr_pct > 3:
-                    risk_level = "High"
-                elif atr_pct > 1.5:
-                    risk_level = "Medium"
-
-        result = {
-            "ticker": ticker_upper,
-            "signal": signal,
-            "strength": strength,
-            "score": final_score,
-            "technical_score": tech_score,
-            "sentiment_score": sent_score,
-            "risk_level": risk_level,
-            "reasons": reasons,
-        }
-
-        return result
