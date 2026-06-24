@@ -6,7 +6,7 @@
   <p>
     <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
     <img src="https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB" alt="React"/>
-    <img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL"/>
+    <img src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite"/>
     <img src="https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white" alt="Vite"/>
     <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind"/>
     <img src="https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white" alt="Vercel"/>
@@ -26,6 +26,34 @@
 | Swagger Docs | [https://quantlens-ai.onrender.com/docs](https://quantlens-ai.onrender.com/docs) |
 
 **Demo credentials:** `demo@quantlens.ai` / `password123`
+
+---
+
+## Application Screenshots
+
+### Dashboard
+
+![Dashboard](screenshots/dashboard.png)
+
+### Stock Analysis
+
+![Stock Analysis](screenshots/stock-analysis.png)
+
+### Watchlist
+
+![Watchlist](screenshots/Watchlist.png)
+
+### Compare Stocks
+
+![Compare](screenshots/Compare.png)
+
+### AI Sentiment Analysis
+
+![Sentiment Analysis](screenshots/sentiment-news.jpeg)
+
+### Stock Screener
+
+![Screener](screenshots/screener.jpeg)
 
 ---
 
@@ -85,74 +113,9 @@ The system aggregates data from Yahoo Finance (via `yfinance` and direct HTTP), 
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Frontend (Vercel)                         │
-│  React 19 + Vite + Tailwind CSS + Recharts                   │
-│  Hash-based SPA routing (no react-router)                    │
-│  Auth context · Watchlist context · localStorage caching      │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ HTTPS / Bearer JWT
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                Backend (Render - FastAPI)                    │
-│                                                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐│
-│  │  Auth    │  │  Stocks  │  │Watchlist │  │  Insights   ││
-│  │ /auth    │  │ /stocks  │  │/watchlist│  │/insights    ││
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────┬──────┘│
-│       │             │             │               │        │
-│       └─────────────┴─────────────┴───────────────┘        │
-│                           │                                 │
-│              ┌────────────▼────────────┐                    │
-│              │   MarketDataService     │                    │
-│              │   SentimentService      │                    │
-│              └────────────┬────────────┘                    │
-│                           │                                 │
-│              ┌────────────▼────────────┐                    │
-│              │   TTLCache (5 caches)   │                    │
-│              │   LRU · 15min TTL       │                    │
-│              └─────────────────────────┘                    │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-         ┌─────────────┼─────────────┬──────────────────┐
-         ▼             ▼             ▼                  ▼
-   ┌──────────┐ ┌───────────┐ ┌───────────┐ ┌──────────────┐
-   │ Finnhub  │ │ Yahoo     │ │ yfinance  │ │ PostgreSQL   │
-   │ (Tier 1) │ │ Direct    │ │ (Tier 3)  │ │ (or SQLite)  │
-   └──────────┘ │ HTTP      │ └───────────┘ └──────────────┘
-                │ (Tier 2)  │
-                └───────────┘
-```
+![System Architecture](screenshots/architecture.png)
 
-```mermaid
-graph TD
-    Client[React SPA<br/>Vercel] -->|HTTPS / JWT| API[FastAPI<br/>Render]
-    
-    subgraph Backend
-        API --> Router["/api/v1 Router"]
-        Router --> Auth["Auth<br/>/auth"]
-        Router --> Stocks["Stocks<br/>/stocks"]
-        Router --> WL["Watchlist<br/>/watchlist"]
-        Router --> Insights["Insights<br/>/insights"]
-        
-        Auth --> JWT["JWT + bcrypt"]
-        Stocks --> MDS["MarketDataService"]
-        Insights --> SS["SentimentService"]
-        
-        MDS --> TTL["TTLCache<br/>5 caches · 900s TTL"]
-        
-        MDS --> Finnhub["Finnhub<br/>Tier 1"]
-        MDS --> YahooDirect["Yahoo Direct HTTP<br/>Tier 2"]
-        MDS --> YFinance["yfinance<br/>Tier 3"]
-        
-        SS --> VADER["VADER Sentiment"]
-        SS --> Lexicon["Financial Lexicon<br/>Fallback"]
-    end
-    
-    Router --> DB[("PostgreSQL<br/>Render")]
-    Router --> SQLite[("SQLite<br/>Dev")]
-```
+QuantLens AI uses a React frontend and FastAPI backend with multi-provider market data aggregation, intelligent fallback mechanisms, sentiment analysis, caching, and watchlist management.
 
 ---
 
@@ -271,7 +234,7 @@ Final technical score clamped to `[0, 100]`.
 |-----------|----------|--------|
 | Frontend | Vercel | `vercel.json` with Vite build |
 | Backend | Render | `uvicorn` via Render Web Service |
-| Database | Render PostgreSQL (fallback: SQLite for local dev) | `DATABASE_URL` env var |
+| Database | SQLite | `DATABASE_URL` env var |
 
 ---
 
@@ -402,7 +365,7 @@ quantlens-ai/
 ### Prerequisites
 - Python 3.11+
 - Node.js 20+
-- PostgreSQL (optional, SQLite default for dev)
+- SQLite (default, no external database required)
 
 ### Backend
 
@@ -460,10 +423,10 @@ VALUES (
 
 ### Backend (Render)
 - Web Service running `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- Required env vars: `SECRET_KEY`, `DATABASE_URL` (PostgreSQL)
+- Required env vars: `SECRET_KEY`, `DATABASE_URL` (SQLite by default)
 - Optional: `FINNHUB_API_KEY`, `BACKEND_CORS_ORIGINS`
 - 512 MB RAM (free tier)
-- Database: Render PostgreSQL
+- Database: SQLite
 
 ---
 
@@ -510,7 +473,7 @@ Three-layer cache strategy to minimize API calls:
 
 ## Resume Highlights
 
-- Designed and deployed a full-stack financial research platform serving 16 REST API endpoints, using FastAPI, React 19, PostgreSQL, and Vercel/Render deployment
+- Designed and deployed a full-stack financial research platform serving 16 REST API endpoints, using FastAPI, React 19, SQLite, and Vercel/Render deployment
 - Implemented a resilient three-tier data sourcing architecture (Finnhub → Yahoo Direct → yfinance) with graceful degradation under API rate limits, ensuring 100% endpoint availability
 - Built an in-memory TTL caching layer (cachetools) reducing redundant external API calls by up to 90% on repeated requests within 15-minute windows
 - Developed a server-side technical analysis engine computing RSI, MACD, Bollinger Bands, EMA/SMA, and ATR from daily OHLCV data using NumPy/Pandas
@@ -519,39 +482,6 @@ Three-layer cache strategy to minimize API calls:
 - Implemented JWT authentication with bcrypt password hashing, CORS middleware, and role-based API access protection across all endpoints
 
 ---
-
-## Architecture
-
-![System Architecture](screenshots/architecture.png)
-
-QuantLens AI uses a React frontend and FastAPI backend with multi-provider market data aggregation, intelligent fallback mechanisms, sentiment analysis, caching, and watchlist management.
-
-## Application Screenshots
-
-### Dashboard
-
-![Dashboard](screenshots/dashboard.png)
-
-### Stock Analysis
-
-![Stock Analysis](screenshots/stock-analysis.png)
-
-### Watchlist
-
-![Watchlist](screenshots/Watchlist.png)
-
-### Compare Stocks
-
-![Compare](screenshots/Compare.png)
-
-### AI Sentiment Analysis
-
-![Sentiment Analysis](screenshots/sentiment-news.jpeg)
-
-### Stock Screener
-
-![Screener](screenshots/screener.jpeg)
-
 
 ## Author
 
