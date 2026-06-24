@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List
 from app.services.market_data import MarketDataService
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle, TechnicalIndicators
-from app.api.v1.auth import get_current_user  # Dependency protection
+from app.api.v1.auth import get_current_user
 from app.models.user import User
 
 router = APIRouter()
@@ -30,10 +30,9 @@ def get_stock_overview(
 @router.get("/{ticker}/history", response_model=List[StockHistoryPoint])
 def get_stock_history(
     ticker: str,
-    period: str = Query("1m", regex="^(1m|6m|1y|5y)$"),
+    period: str = Query("1m", pattern="^(1m|6m|1y|5y)$"),
     current_user: User = Depends(get_current_user)
 ):
-    # Retrieve time-series details
     history = MarketDataService.get_stock_history(ticker, period)
     if not history:
         raise HTTPException(
@@ -49,7 +48,6 @@ def get_stock_news(
 ):
     news = MarketDataService.get_stock_news(ticker)
     return news
-
 
 @router.get("/{ticker}/technical", response_model=TechnicalIndicators)
 def get_stock_technical(
