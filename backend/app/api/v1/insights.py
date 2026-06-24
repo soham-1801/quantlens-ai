@@ -1,4 +1,5 @@
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -10,6 +11,8 @@ from app.schemas.stock import StockSentimentSummary, StockNewsArticle, ResearchS
 from app.services.market_data import MarketDataService
 from app.services.sentiment import SentimentService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 @router.get("/{ticker}/sentiment", response_model=StockSentimentSummary)
@@ -20,15 +23,7 @@ def get_ticker_sentiment(
 ):
     ticker_upper = ticker.upper().strip()
     
-    # 1. Verify ticker is valid by checking overview
-    overview = MarketDataService.get_stock_overview(ticker_upper)
-    if not overview:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Stock ticker '{ticker_upper}' is invalid or has no data."
-        )
-        
-    # 2. Check if we have a fresh cached sentiment record (within 24 hours)
+    # 1. Check if we have a fresh cached sentiment record (within 24 hours)
     cache_record = db.query(SentimentCache).filter(SentimentCache.ticker == ticker_upper).first()
     now = datetime.now()
     
@@ -110,11 +105,6 @@ def get_ticker_research(
     ticker_upper = ticker.upper().strip()
 
     overview = MarketDataService.get_stock_overview(ticker_upper)
-    if not overview:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Stock ticker '{ticker_upper}' is invalid or has no data."
-        )
 
     news_articles = MarketDataService.get_stock_news(ticker_upper)
     _, overall_score, scored_articles = SentimentService.analyze_news_list(news_articles) if news_articles else ("neutral", 0.0, [])
@@ -123,44 +113,44 @@ def get_ticker_research(
     risks = []
     growth_drivers = []
 
-    if overview.market_cap and overview.market_cap > 1e10:
-        strengths.append("Large-cap market leader with substantial valuation")
-    if overview.pe_ratio and 10 < overview.pe_ratio < 25:
-        strengths.append("Reasonable valuation relative to earnings")
-    elif overview.pe_ratio and overview.pe_ratio <= 10:
-        strengths.append("Potentially undervalued based on earnings multiple")
-    if overview.beta and overview.beta < 1.0:
-        strengths.append("Lower volatility compared to the broader market")
-    if overview.dividend_yield and overview.dividend_yield > 0:
-        strengths.append(f"Pays a dividend yielding {overview.dividend_yield*100:.2f}%")
-    if overview.eps and overview.eps > 0:
-        strengths.append("Positive earnings per share indicating profitability")
+    if overview:
+        if overview.market_cap and overview.market_cap > 1e10:
+            strengths.append("Large-cap market leader with substantial valuation")
+        if overview.pe_ratio and 10 < overview.pe_ratio < 25:
+            strengths.append("Reasonable valuation relative to earnings")
+        elif overview.pe_ratio and overview.pe_ratio <= 10:
+            strengths.append("Potentially undervalued based on earnings multiple")
+        if overview.beta and overview.beta < 1.0:
+            strengths.append("Lower volatility compared to the broader market")
+        if overview.dividend_yield and overview.dividend_yield > 0:
+            strengths.append(f"Pays a dividend yielding {overview.dividend_yield*100:.2f}%")
+        if overview.eps and overview.eps > 0:
+            strengths.append("Positive earnings per share indicating profitability")
+        if overview.pe_ratio and overview.pe_ratio > 30:
+            risks.append("Premium valuation multiple may indicate elevated expectations")
+        if overview.beta and overview.beta > 1.3:
+            risks.append("High beta suggests above-average price volatility")
+        if overview.dividend_yield is not None and overview.dividend_yield == 0:
+            risks.append("No dividend income stream for income-focused investors")
+        if overview.eps and overview.eps < 0:
+            risks.append("Negative earnings per share signals unprofitability")
+        if overview.market_cap and overview.market_cap < 1e9:
+            growth_drivers.append("Smaller market cap offers room for expansion")
+        if overview.pe_ratio and overview.pe_ratio < 20:
+            growth_drivers.append("Attractive valuation could drive multiple expansion")
+        if overview.avg_volume and overview.volume and overview.volume > overview.avg_volume * 1.5:
+            growth_drivers.append("Above-average trading volume signals heightened investor interest")
+        if overview.sector:
+            growth_drivers.append(f"Operates in the {overview.sector} sector with potential industry tailwinds")
+
     if overall_score > 0.15:
         strengths.append("Favorable market sentiment from recent news coverage")
-    if not strengths:
-        strengths.append("Established publicly traded company with available market data")
-
-    if overview.pe_ratio and overview.pe_ratio > 30:
-        risks.append("Premium valuation multiple may indicate elevated expectations")
-    if overview.beta and overview.beta > 1.3:
-        risks.append("High beta suggests above-average price volatility")
-    if overview.dividend_yield is not None and overview.dividend_yield == 0:
-        risks.append("No dividend income stream for income-focused investors")
-    if overview.eps and overview.eps < 0:
-        risks.append("Negative earnings per share signals unprofitability")
     if overall_score < -0.15:
         risks.append("Negative sentiment bias in recent news coverage")
+    if not strengths:
+        strengths.append("Established publicly traded company with available market data")
     if not risks:
         risks.append("No significant red flags detected in current market data")
-
-    if overview.market_cap and overview.market_cap < 1e9:
-        growth_drivers.append("Smaller market cap offers room for expansion")
-    if overview.pe_ratio and overview.pe_ratio < 20:
-        growth_drivers.append("Attractive valuation could drive multiple expansion")
-    if overview.avg_volume and overview.volume and overview.volume > overview.avg_volume * 1.5:
-        growth_drivers.append("Above-average trading volume signals heightened investor interest")
-    if overview.sector:
-        growth_drivers.append(f"Operates in the {overview.sector} sector with potential industry tailwinds")
     if not growth_drivers:
         growth_drivers.append("Market position and ongoing operations provide baseline growth platform")
 
@@ -224,13 +214,6 @@ def get_ticker_recommendation(
     current_user: User = Depends(get_current_user)
 ):
     ticker_upper = ticker.upper().strip()
-
-    overview = MarketDataService.get_stock_overview(ticker_upper)
-    if not overview:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Stock ticker '{ticker_upper}' is invalid or has no data."
-        )
 
     result = MarketDataService.get_stock_recommendation(ticker_upper)
     if not result:
