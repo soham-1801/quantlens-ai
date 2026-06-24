@@ -526,6 +526,33 @@ Three-layer cache strategy to minimize API calls:
 
 QuantLens AI uses a React frontend and FastAPI backend with multi-provider market data aggregation, intelligent fallback mechanisms, sentiment analysis, caching, and watchlist management.
 
+## Application Screenshots
+
+### Dashboard
+
+![Dashboard](screenshots/dashboard.png)
+
+### Stock Analysis
+
+![Stock Analysis](screenshots/stock-analysis.png)
+
+### Watchlist
+
+![Watchlist](screenshots/Watchlist.png)
+
+### Compare Stocks
+
+![Compare](screenshots/Compare.png)
+
+### AI Sentiment Analysis
+
+![Sentiment Analysis](screenshots/sentiment-news.jpeg)
+
+### Stock Screener
+
+![Screener](screenshots/screener.jpeg)
+
+
 ## Author
 
 Soham Mangroliya
