@@ -487,7 +487,7 @@ class MarketDataService:
                         quote_type=quote_type
                     ))
         except Exception as e:
-            print(f"Yahoo autocomplete error: {e}")
+            logger.error("Yahoo autocomplete error: %s", e)
 
         if not results:
             fallback_tickers = {
