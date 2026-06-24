@@ -131,12 +131,12 @@ const focusSearchBar = () => {
 };
 
 const SORT_COLUMNS = [
-  { key: "ticker", label: "Ticker", numeric: false },
-  { key: "company", label: "Company", numeric: false },
-  { key: "price", label: "Price", numeric: true },
-  { key: "change", label: "Daily Change", numeric: true },
-  { key: "marketCap", label: "Market Cap", numeric: true },
-  { key: "volume", label: "Volume", numeric: true },
+  { key: "ticker", label: "Ticker", numeric: false, hide: "" },
+  { key: "company", label: "Company", numeric: false, hide: "hidden sm:table-cell" },
+  { key: "price", label: "Price", numeric: true, hide: "" },
+  { key: "change", label: "Change", numeric: true, hide: "" },
+  { key: "marketCap", label: "Mkt Cap", numeric: true, hide: "hidden md:table-cell" },
+  { key: "volume", label: "Volume", numeric: true, hide: "hidden lg:table-cell" },
 ];
 
 export const Watchlist = () => {
@@ -553,67 +553,66 @@ export const Watchlist = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-6xl mx-auto animate-fade-in">
       {/* Page header */}
-      <div className="bg-gradient-to-r from-blue-600/10 via-blue-500/5 to-transparent border border-blue-500/20 p-6 rounded-3xl relative overflow-hidden backdrop-blur-md">
-        <div className="absolute top-0 right-0 w-56 h-56 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600/8 via-blue-500/4 to-transparent border border-blue-500/15 p-5 sm:p-6 md:p-7 rounded-2xl sm:rounded-3xl">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-blue-600/10 border border-blue-500/20">
             <Star className="w-5 h-5 text-blue-400 fill-blue-400/20" />
           </div>
           <div>
-            <h2 className="text-xl font-extrabold text-gray-100 leading-none">
-              My Watchlist ({watchlist.length})
+            <h2 className="text-lg sm:text-xl font-extrabold text-gray-100 leading-none tracking-tight">
+              Watchlist
             </h2>
-            <p className="text-xs text-gray-400 font-light mt-1">
+            <p className="text-xs text-gray-500 font-light mt-1">
               {watchlist.length === 0
                 ? "No stocks tracked yet"
-                : `Tracking ${watchlist.length} stock${watchlist.length !== 1 ? "s" : ""}`}
+                : `${watchlist.length} stock${watchlist.length !== 1 ? "s" : ""} · Real-time tracking`}
             </p>
           </div>
         </div>
       </div>
 
       {/* Portfolio Overview */}
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         <div className="flex items-center gap-2">
           <PieChart className="w-4 h-4 text-blue-400" />
-          <h3 className="text-sm font-bold text-gray-200 uppercase tracking-wider">
+          <h3 className="text-xs sm:text-sm font-bold text-gray-200 uppercase tracking-wider">
             Portfolio Overview
           </h3>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
+            <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
               <BarChart3 className="w-3.5 h-3.5" />
-              Total Stocks
+              Holdings
             </div>
-            <p className="text-lg font-black text-white tabular-nums">
+            <p className="text-base sm:text-lg font-black text-white tabular-nums">
               {watchlist.length}
             </p>
           </div>
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
             <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
               <DollarSign className="w-3.5 h-3.5" />
-              Total Market Cap
+              Market Cap
             </div>
             <p className="text-lg font-black text-white tabular-nums">
               {analytics.totalMarketCap > 0 ? formatLargeNumber(analytics.totalMarketCap) : "N/A"}
             </p>
           </div>
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
+            <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
               <DollarSign className="w-3.5 h-3.5" />
-              Watchlist Aggregate
+              Portfolio Value
             </div>
             <p className="text-lg font-black text-white tabular-nums">
               {analytics.portfolioValue > 0 ? formatCurrency(analytics.portfolioValue) : "N/A"}
             </p>
           </div>
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
+            <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              Daily Change %
+              Avg Change
             </div>
             {analytics.avgChange != null && Number.isFinite(analytics.avgChange) ? (
               <span
@@ -633,8 +632,8 @@ export const Watchlist = () => {
               <p className="text-lg font-black text-gray-500">N/A</p>
             )}
           </div>
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
+            <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
               <TrendingUp className="w-3.5 h-3.5" />
               Best Performer
             </div>
@@ -649,8 +648,8 @@ export const Watchlist = () => {
               <p className="text-lg font-black text-gray-500">N/A</p>
             )}
           </div>
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
+            <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5">
               <TrendingDown className="w-3.5 h-3.5" />
               Worst Performer
             </div>
@@ -669,8 +668,8 @@ export const Watchlist = () => {
 
         {/* Sector Allocation */}
         {analytics.sectorData.length > 0 && (
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-4">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
+            <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-4">
               <PieChart className="w-3.5 h-3.5" />
               Sector Allocation
             </div>
@@ -702,10 +701,10 @@ export const Watchlist = () => {
       </div>
 
       {/* Smart Alerts */}
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         <div className="flex items-center gap-2">
           <Bell className="w-4 h-4 text-amber-400" />
-          <h3 className="text-sm font-bold text-gray-200 uppercase tracking-wider">
+          <h3 className="text-xs sm:text-sm font-bold text-gray-200 uppercase tracking-wider">
             Smart Alerts
           </h3>
           {alerts.length > 0 && (
@@ -715,7 +714,7 @@ export const Watchlist = () => {
           )}
         </div>
         {alerts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
             {alerts.map((alert, i) => {
               const severityColors = {
                 High: { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/20", dot: "bg-red-500" },
@@ -736,7 +735,7 @@ export const Watchlist = () => {
               return (
                 <div
                   key={`${alert.ticker}-${alert.type}-${i}`}
-                  className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md hover:border-[#242D3D] transition-colors"
+                  className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 animate-fade-in-up"
                 >
                   <div className="flex items-center justify-between mb-2.5">
                     <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">
@@ -757,24 +756,24 @@ export const Watchlist = () => {
             })}
           </div>
         ) : (
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md flex items-center gap-3">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover flex items-center gap-3">
             <Bell className="w-4 h-4 text-gray-600" />
-            <p className="text-[11px] text-gray-500 font-light">No alerts detected.</p>
+            <p className="text-xs text-gray-500 font-light">No alerts detected.</p>
           </div>
         )}
       </div>
 
       {/* Portfolio Health */}
-      <div className="space-y-4 relative z-10">
+      <div className="space-y-3 sm:space-y-4 relative z-10">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-sm font-bold text-gray-200 uppercase tracking-wider">
+          <h3 className="text-xs sm:text-sm font-bold text-gray-200 uppercase tracking-wider">
             Portfolio Health
           </h3>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
           {/* Grade */}
-          <div className="group relative bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md min-h-[120px]">
+          <div className="group relative glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4">
             <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-3">
               <Shield className="w-3.5 h-3.5" />
               Portfolio Grade
@@ -816,7 +815,7 @@ export const Watchlist = () => {
           </div>
 
           {/* Diversification */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md min-h-[120px]">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
             <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-3">
               <BarChart3 className="w-3.5 h-3.5" />
               Diversification
@@ -833,7 +832,7 @@ export const Watchlist = () => {
           </div>
 
           {/* Risk Score */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md min-h-[120px]">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
             <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-3">
               <AlertTriangle className="w-3.5 h-3.5" />
               Risk Score
@@ -848,7 +847,7 @@ export const Watchlist = () => {
           </div>
 
           {/* Sector Concentration */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md min-h-[120px]">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
             <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-3">
               <PieChart className="w-3.5 h-3.5" />
               Top Sector
@@ -876,7 +875,7 @@ export const Watchlist = () => {
           </div>
 
           {/* Portfolio Insight */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md col-span-2 sm:col-span-3 lg:col-span-1 min-h-[120px]">
+          <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover col-span-2 sm:col-span-3 lg:col-span-1">
             <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">
               <Lightbulb className="w-3.5 h-3.5" />
               Insight
@@ -890,9 +889,9 @@ export const Watchlist = () => {
 
       {/* Empty state */}
       {sorted.length === 0 ? (
-        <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-3xl backdrop-blur-md pt-10 pb-12 px-6 flex flex-col items-center text-center space-y-6">
+        <div className="glass-card rounded-xl sm:rounded-3xl pt-10 pb-12 px-6 flex flex-col items-center text-center space-y-6">
           <div className="p-4 rounded-2xl bg-[#0B0F19]/60 border border-[#242D3D]/60">
-            <TrendingUp className="w-8 h-8 text-gray-600" />
+            <TrendingUp className="w-8 h-8 text-gray-500" />
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-semibold text-gray-300">
@@ -946,20 +945,20 @@ export const Watchlist = () => {
         </div>
       ) : (
         /* Finance table */
-        <div className="overflow-x-auto rounded-2xl border border-[#242D3D]/60 bg-[#161B26]/40 backdrop-blur-md">
+        <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover">
           <table className="w-full text-sm">
             {/* Sticky header */}
             <thead>
-              <tr className="border-b border-[#242D3D]/60 bg-[#111622]">
+              <tr className="border-b border-[#242D3D]/60 bg-[#111622] sticky top-0 z-10">
                 {SORT_COLUMNS.map((col) => {
                   const isActive = sortKey === col.key;
                   return (
                     <th
                       key={col.key}
                       onClick={() => handleSort(col.key)}
-                      className={`px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer select-none transition-colors whitespace-nowrap ${
+                      className={`px-2 sm:px-4 py-3.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider cursor-pointer select-none transition-colors whitespace-nowrap ${
                         col.numeric ? "text-right" : "text-left"
-                      } ${isActive ? "text-blue-400" : "text-gray-400 hover:text-gray-200"}`}
+                      } ${isActive ? "text-blue-400" : "text-gray-400 hover:text-gray-200"} ${col.hide}`}
                     >
                       <span className="inline-flex items-center gap-1">
                         {col.label}
@@ -976,13 +975,13 @@ export const Watchlist = () => {
                     </th>
                   );
                 })}
-                <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 text-right whitespace-nowrap">
+                <th className="px-2 sm:px-4 py-3.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gray-400 text-right whitespace-nowrap">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#242D3D]/30">
-              {sorted.map((item) => {
+              {sorted.map((item, index) => {
                 const change = item.price_change_percent;
                 const isPositive = change != null && change >= 0;
 
@@ -990,21 +989,22 @@ export const Watchlist = () => {
                   <tr
                     key={item.ticker}
                     onClick={() => navigateToStock(item.ticker)}
-                    className="group cursor-pointer transition-all duration-200 hover:bg-blue-500/[0.07]"
+                    className="group cursor-pointer transition-all duration-200 hover:bg-blue-500/[0.07] animate-fade-in-up"
+                    style={{ animationDelay: `${index * 30}ms` }}
                   >
                     {/* Ticker */}
-                    <td className="px-4 py-3.5 whitespace-nowrap border-l-2 border-l-transparent group-hover:border-l-blue-500/30 transition-all duration-200">
-                      <div className="flex items-center gap-2.5">
+                    <td className="px-2 sm:px-4 py-3.5 whitespace-nowrap border-l-2 border-l-transparent group-hover:border-l-blue-500/30 transition-all duration-200">
+                      <div className="flex items-center gap-2 sm:gap-2.5">
                         <StockLogo
                           ticker={item.ticker}
                           website={item.website}
-                          className="w-7 h-7 shrink-0"
+                          className="w-6 h-6 sm:w-7 sm:h-7 shrink-0"
                         />
                         <div>
-                          <span className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
+                          <span className="text-xs sm:text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
                             {item.ticker}
                           </span>
-                          <span className="ml-1.5 text-[9px] text-gray-500 font-bold bg-[#0B0F19] border border-[#242D3D] px-1 rounded uppercase">
+                          <span className="ml-1 text-[8px] sm:text-[9px] text-gray-500 font-bold bg-[#0B0F19] border border-[#242D3D] px-1 rounded uppercase">
                             US
                           </span>
                         </div>
@@ -1012,19 +1012,19 @@ export const Watchlist = () => {
                     </td>
 
                     {/* Company */}
-                    <td className="px-4 py-3.5 max-w-[100px] sm:max-w-[160px] lg:max-w-[220px]">
+                    <td className="px-2 sm:px-4 py-3.5 max-w-[80px] sm:max-w-[120px] md:max-w-[160px] lg:max-w-[220px] hidden sm:table-cell">
                       <p className="text-xs text-gray-400 font-light truncate">
                         {item.company_name || "N/A"}
                       </p>
                     </td>
 
                     {/* Price */}
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-sm font-semibold text-white">
+                    <td className="px-2 sm:px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-xs sm:text-sm font-semibold text-white">
                       {formatPrice(item.current_price)}
                     </td>
 
                     {/* Daily Change */}
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-3.5 text-right whitespace-nowrap">
                       {change != null ? (
                         <span
                           className={`inline-flex items-center gap-1 font-bold text-xs px-2 py-1 rounded-lg ${
@@ -1047,17 +1047,17 @@ export const Watchlist = () => {
                     </td>
 
                     {/* Market Cap */}
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-sm font-medium text-gray-300">
+                    <td className="px-2 sm:px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-xs sm:text-sm font-medium text-gray-300 hidden md:table-cell">
                       {formatLargeNumber(item.market_cap)}
                     </td>
 
                     {/* Volume */}
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-sm font-medium text-gray-300">
+                    <td className="px-2 sm:px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-xs sm:text-sm font-medium text-gray-300 hidden lg:table-cell">
                       {formatVolume(item.volume)}
                     </td>
 
                     {/* Actions */}
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-3.5 text-right whitespace-nowrap">
                       <div
                         className="inline-flex items-center gap-1"
                         onClick={(e) => e.stopPropagation()}

@@ -1,11 +1,13 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+import re
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.exc import IntegrityError
 from typing import List
 from app.core.database import get_db
 from app.api.v1.auth import get_current_user
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.schemas.watchlist import WatchlistCreate, WatchlistResponse
@@ -16,8 +18,21 @@ _vol_logger = logging.getLogger("volume_trace")
 
 router = APIRouter()
 
+TICKER_PATTERN = re.compile(r"^[A-Z0-9.]{1,20}$")
+
+def validate_ticker(ticker: str) -> str:
+    cleaned = ticker.upper().strip()
+    if not TICKER_PATTERN.match(cleaned):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid ticker symbol: '{ticker}'. Tickers must be 1-20 alphanumeric characters (dots allowed)."
+        )
+    return cleaned
+
 @router.get("/", response_model=List[WatchlistResponse])
+@limiter.limit("30/minute")
 def get_watchlist(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -38,8 +53,8 @@ def get_watchlist(
                     volume = overview.volume
                     item.volume = volume
                     db.commit()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Volume backfill failed for %s: %s", item.ticker, e)
                 
         results.append(WatchlistResponse(
             id=item.id,
@@ -66,14 +81,17 @@ def get_watchlist(
     return results
 
 @router.get("/{ticker}", response_model=WatchlistResponse)
+@limiter.limit("30/minute")
 def get_watchlist_item(
+    request: Request,
     ticker: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    ticker = validate_ticker(ticker)
     item = db.query(Watchlist).filter(
         Watchlist.user_id == current_user.id,
-        Watchlist.ticker == ticker.upper()
+        Watchlist.ticker == ticker
     ).first()
     
     if not item:
@@ -94,8 +112,8 @@ def get_watchlist_item(
                 volume = overview.volume
                 item.volume = volume
                 db.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Volume backfill failed for %s: %s", item.ticker, e)
         
     return WatchlistResponse(
         id=item.id,
@@ -120,12 +138,14 @@ def get_watchlist_item(
     )
 
 @router.post("/", response_model=WatchlistResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 def add_to_watchlist(
+    request: Request,
     payload: WatchlistCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticker_upper = payload.ticker.upper().strip()
+    ticker_upper = validate_ticker(payload.ticker)
     
     # 1. Validate that the ticker is a real stock
     overview = MarketDataService.get_stock_overview(ticker_upper)
@@ -207,12 +227,14 @@ def add_to_watchlist(
     )
 
 @router.post("/{ticker}/refresh", response_model=WatchlistResponse)
+@limiter.limit("20/minute")
 def refresh_watchlist_item(
+    request: Request,
     ticker: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticker_upper = ticker.upper().strip()
+    ticker_upper = validate_ticker(ticker)
     
     item = db.query(Watchlist).filter(
         Watchlist.user_id == current_user.id,
@@ -285,12 +307,14 @@ def refresh_watchlist_item(
     )
 
 @router.delete("/{ticker}", status_code=status.HTTP_200_OK)
+@limiter.limit("20/minute")
 def remove_from_watchlist(
+    request: Request,
     ticker: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticker_upper = ticker.upper().strip()
+    ticker_upper = validate_ticker(ticker)
     
     item = db.query(Watchlist).filter(
         Watchlist.user_id == current_user.id,

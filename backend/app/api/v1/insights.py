@@ -1,10 +1,12 @@
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+import re
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.api.v1.auth import get_current_user
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.models.sentiment_cache import SentimentCache
 from app.schemas.stock import StockSentimentSummary, StockNewsArticle, ResearchSummary, EarningsSummary, Recommendation
@@ -15,13 +17,26 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+TICKER_PATTERN = re.compile(r"^[A-Z0-9.]{1,20}$")
+
+def validate_ticker(ticker: str) -> str:
+    cleaned = ticker.upper().strip()
+    if not TICKER_PATTERN.match(cleaned):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid ticker symbol: '{ticker}'. Tickers must be 1-20 alphanumeric characters (dots allowed)."
+        )
+    return cleaned
+
 @router.get("/{ticker}/sentiment", response_model=StockSentimentSummary)
+@limiter.limit("20/minute")
 def get_ticker_sentiment(
+    request: Request,
     ticker: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticker_upper = ticker.upper().strip()
+    ticker_upper = validate_ticker(ticker)
     
     # 1. Check if we have a fresh cached sentiment record (within 24 hours)
     cache_record = db.query(SentimentCache).filter(SentimentCache.ticker == ticker_upper).first()
@@ -86,7 +101,7 @@ def get_ticker_sentiment(
     except Exception as e:
         db.rollback()
         # Non-fatal database error, we can still return results to the client
-        print(f"Failed to save sentiment cache: {e}")
+        logger.warning("Failed to save sentiment cache for %s: %s", ticker_upper, e)
         
     return StockSentimentSummary(
         ticker=ticker_upper,
@@ -98,11 +113,13 @@ def get_ticker_sentiment(
 
 
 @router.get("/{ticker}/research", response_model=ResearchSummary)
+@limiter.limit("20/minute")
 def get_ticker_research(
+    request: Request,
     ticker: str,
     current_user: User = Depends(get_current_user)
 ):
-    ticker_upper = ticker.upper().strip()
+    ticker_upper = validate_ticker(ticker)
 
     overview = MarketDataService.get_stock_overview(ticker_upper)
 
@@ -171,11 +188,13 @@ def get_ticker_research(
 
 
 @router.get("/{ticker}/earnings", response_model=EarningsSummary)
+@limiter.limit("20/minute")
 def get_ticker_earnings(
+    request: Request,
     ticker: str,
     current_user: User = Depends(get_current_user)
 ):
-    ticker_upper = ticker.upper().strip()
+    ticker_upper = validate_ticker(ticker)
 
     # Uses 3-tier fallback: Finnhub -> Direct Yahoo HTTP -> yfinance
     earnings_data = MarketDataService.get_stock_earnings(ticker_upper)
@@ -209,11 +228,13 @@ def get_ticker_earnings(
 
 
 @router.get("/{ticker}/recommendation", response_model=Recommendation)
+@limiter.limit("20/minute")
 def get_ticker_recommendation(
+    request: Request,
     ticker: str,
     current_user: User = Depends(get_current_user)
 ):
-    ticker_upper = ticker.upper().strip()
+    ticker_upper = validate_ticker(ticker)
 
     result = MarketDataService.get_stock_recommendation(ticker_upper)
     if not result:

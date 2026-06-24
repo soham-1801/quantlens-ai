@@ -5,47 +5,16 @@ import pandas as pd
 import numpy as np
 import math
 import time
-import logging
-import threading
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from cachetools import TTLCache
 from app.core.config import settings
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
 
-logger = logging.getLogger(__name__)
-
 YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 YAHOO_CRUMB_URL = "https://query2.finance.yahoo.com/v1/test/getcrumb"
-
-# Global Yahoo session with crumb for direct HTTP calls
-_yahoo_session: Optional[requests.Session] = None
-_yahoo_session_lock = threading.Lock()
-
-def _get_yahoo_session() -> requests.Session:
-    global _yahoo_session
-    if _yahoo_session is not None:
-        return _yahoo_session
-    with _yahoo_session_lock:
-        if _yahoo_session is not None:
-            return _yahoo_session
-        session = requests.Session()
-        session.headers.update(YAHOO_HEADERS)
-        try:
-            session.get("https://fc.yahoo.com", timeout=5)
-            resp = session.get(YAHOO_CRUMB_URL, timeout=5)
-            if resp.status_code == 200:
-                crumb = resp.text.strip()
-                session.params = {'crumb': crumb}
-                logger.info("Yahoo session initialized with crumb")
-            else:
-                logger.warning("Failed to get Yahoo crumb: %s", resp.status_code)
-        except Exception as e:
-            logger.warning("Yahoo session init error: %s", e)
-        _yahoo_session = session
-        return session
 
 def safe_float(val) -> Optional[float]:
     if val is None:
@@ -66,40 +35,25 @@ def safe_int(val) -> Optional[int]:
     except (ValueError, TypeError):
         return None
 
-def _yahoo_get_json(url: str, timeout: int = 10, use_session: bool = False) -> Optional[dict]:
-    for attempt in range(3):
+def _yahoo_get_json(url: str, timeout: int = 10) -> Optional[dict]:
+    for attempt in range(2):
         try:
-            if use_session:
-                session = _get_yahoo_session()
-                resp = session.get(url, timeout=timeout)
-            else:
-                resp = requests.get(url, headers=YAHOO_HEADERS, timeout=timeout)
+            resp = requests.get(url, headers=YAHOO_HEADERS, timeout=timeout)
             if resp.status_code == 429:
-                wait = 2 ** attempt
-                logger.warning("429 on %s, retrying in %ds", url.split('?')[0], wait)
-                time.sleep(wait)
+                time.sleep(1)
                 continue
             if resp.status_code == 401:
-                logger.warning("401 on %s, reinitializing session", url.split('?')[0])
-                if use_session:
-                    global _yahoo_session
-                    with _yahoo_session_lock:
-                        _yahoo_session = None
-                    _get_yahoo_session()
-                continue
+                return None
             if resp.status_code == 200:
                 return resp.json()
-            logger.debug("HTTP %d on %s", resp.status_code, url.split('?')[0])
             return None
-        except requests.RequestException as e:
-            logger.warning("Request error on %s: %s", url.split('?')[0], e)
-            time.sleep(0.5 * (attempt + 1))
+        except requests.RequestException:
+            time.sleep(0.5)
     return None
 
 def _finnhub_get(endpoint: str, params: dict = None) -> Optional[dict]:
     api_key = settings.FINNHUB_API_KEY
     if not api_key:
-        logger.debug("Finnhub skipped (no API key)")
         return None
     base = "https://finnhub.io/api/v1"
     p = {"token": api_key}
@@ -108,13 +62,11 @@ def _finnhub_get(endpoint: str, params: dict = None) -> Optional[dict]:
     try:
         resp = requests.get(f"{base}/{endpoint}", params=p, timeout=10)
         if resp.status_code == 429:
-            logger.warning("Finnhub 429 on %s", endpoint)
             return None
         if resp.status_code == 200:
             return resp.json()
-        logger.debug("Finnhub HTTP %d on %s", resp.status_code, endpoint)
-    except requests.RequestException as e:
-        logger.warning("Finnhub error on %s: %s", endpoint, e)
+    except requests.RequestException:
+        pass
     return None
 
 def _finnhub_stock_profile(ticker: str) -> Optional[dict]:
@@ -136,13 +88,9 @@ def _finnhub_metric(ticker: str) -> Optional[dict]:
     return None
 
 def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
-    if not settings.FINNHUB_API_KEY:
-        logger.debug("Finnhub skipped for %s (no API key)", ticker)
-        return None
     profile = _finnhub_stock_profile(ticker)
     metric = _finnhub_metric(ticker)
     if not profile:
-        logger.debug("Finnhub profile empty for %s", ticker)
         return None
     current_price = safe_float(profile.get("shareOutstanding"))
     return StockOverview(
@@ -171,10 +119,10 @@ def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
 
 def _fetch_overview_from_yahoo_direct(ticker: str) -> Optional[StockOverview]:
     url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=summaryProfile,summaryDetail,defaultKeyStatistics,price"
-    data = _yahoo_get_json(url, use_session=True)
+    data = _yahoo_get_json(url)
     if not data:
         url2 = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=summaryProfile,summaryDetail,defaultKeyStatistics,price"
-        data = _yahoo_get_json(url2, use_session=True)
+        data = _yahoo_get_json(url2)
     if not data:
         return None
     try:
@@ -290,10 +238,10 @@ def _fetch_history_yfinance(ticker: str, yf_period: str, yf_interval: str) -> Op
 
 def _fetch_earnings_yahoo_direct(ticker: str) -> Optional[dict]:
     url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=earnings,earningsHistory,financialData"
-    data = _yahoo_get_json(url, use_session=True)
+    data = _yahoo_get_json(url)
     if not data:
         url2 = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=earnings,earningsHistory,financialData"
-        data = _yahoo_get_json(url2, use_session=True)
+        data = _yahoo_get_json(url2)
     if not data:
         return None
     try:
@@ -394,132 +342,12 @@ def _fetch_news_yfinance(ticker: str) -> Optional[List[StockNewsArticle]]:
         return None
 
 
-def _fetch_fast_info(ticker: str) -> Optional[Dict[str, Any]]:
-    """Primary: lightweight price data from yfinance fast_info (no crumb needed)."""
-    for attempt in range(2):
-        try:
-            t = yf.Ticker(ticker)
-            fast = t.fast_info
-            if fast is None:
-                time.sleep(1)
-                continue
-            data: Dict[str, Any] = {}
-            for attr, key in [
-                ('last_price', 'current_price'),
-                ('regularMarketPrice', 'current_price'),
-                ('previous_close', 'previous_close'),
-                ('regularMarketPreviousClose', 'previous_close'),
-                ('day_high', 'day_high'),
-                ('regularMarketDayHigh', 'day_high'),
-                ('day_low', 'day_low'),
-                ('regularMarketDayLow', 'day_low'),
-                ('volume', 'volume'),
-                ('regularMarketVolume', 'volume'),
-                ('market_cap', 'market_cap'),
-                ('marketCap', 'market_cap'),
-                ('year_high', 'fifty_two_week_high'),
-                ('fiftyTwoWeekHigh', 'fifty_two_week_high'),
-                ('year_low', 'fifty_two_week_low'),
-                ('fiftyTwoWeekLow', 'fifty_two_week_low'),
-                ('average_volume', 'avg_volume'),
-                ('averageDailyVolume10Day', 'avg_volume'),
-                ('open', 'open_price'),
-                ('regularMarketOpen', 'open_price'),
-            ]:
-                if key in data:
-                    continue
-                try:
-                    val = getattr(fast, attr, None)
-                    if val is not None:
-                        if key in ('volume', 'avg_volume', 'market_cap'):
-                            data[key] = safe_int(val)
-                        else:
-                            data[key] = safe_float(val)
-                except Exception:
-                    try:
-                        val = fast.get(attr)
-                        if val is not None:
-                            if key in ('volume', 'avg_volume', 'market_cap'):
-                                data[key] = safe_int(val)
-                            else:
-                                data[key] = safe_float(val)
-                    except Exception:
-                        pass
-            if data:
-                logger.info("fast_info OK for %s: price=%s vol=%s", ticker, data.get('current_price'), data.get('volume'))
-                return data
-            time.sleep(1)
-        except Exception as e:
-            logger.warning("fast_info attempt %d failed for %s: %s", attempt + 1, ticker, e)
-            time.sleep(1)
-    logger.warning("fast_info exhausted for %s", ticker)
-    return None
-
-
-def _fetch_history_overview(ticker: str) -> Optional[Dict[str, Any]]:
-    """Secondary: build price data from yfinance history (no crumb needed)."""
-    try:
-        t = yf.Ticker(ticker)
-        df = t.history(period="1mo")
-        if df is None or df.empty:
-            logger.warning("history empty for %s", ticker)
-            return None
-        data: Dict[str, Any] = {}
-        latest = df.iloc[-1]
-        data['current_price'] = safe_float(latest.get('Close'))
-        if len(df) >= 2:
-            prev = df.iloc[-2]
-            data['previous_close'] = safe_float(prev.get('Close'))
-        elif latest.get('Open') is not None:
-            data['previous_close'] = safe_float(latest.get('Open'))
-        data['day_high'] = safe_float(latest.get('High'))
-        data['day_low'] = safe_float(latest.get('Low'))
-        data['volume'] = safe_int(latest.get('Volume'))
-        data['open_price'] = safe_float(latest.get('Open'))
-        if not df['High'].empty:
-            data['fifty_two_week_high'] = safe_float(df['High'].max())
-        if not df['Low'].empty:
-            data['fifty_two_week_low'] = safe_float(df['Low'].min())
-        if not df['Volume'].empty:
-            data['avg_volume'] = safe_int(df['Volume'].mean())
-        logger.info("history overview OK for %s: price=%s", ticker, data.get('current_price'))
-        return data
-    except Exception as e:
-        logger.warning("history overview failed for %s: %s", ticker, e)
-        return None
-
-
-def _fetch_yahoo_search_metadata(ticker: str) -> Optional[Dict[str, Any]]:
-    """Get company name/sector/industry from Yahoo search (no crumb needed)."""
-    url = f"https://query2.finance.yahoo.com/v1/finance/search?q={ticker}&newsCount=0"
-    data = _yahoo_get_json(url)
-    if not data:
-        url = f"https://query1.finance.yahoo.com/v1/finance/search?q={ticker}&newsCount=0"
-        data = _yahoo_get_json(url)
-    if not data:
-        return None
-    quotes = data.get("quotes", [])
-    for quote in quotes:
-        if quote.get("symbol", "").upper() == ticker.upper():
-            meta = {
-                "name": (quote.get("longname") or quote.get("shortname") or ticker),
-                "sector": quote.get("sector"),
-                "industry": quote.get("industry"),
-                "exchange": quote.get("exchange"),
-                "quote_type": quote.get("quoteType"),
-            }
-            logger.info("search metadata OK for %s: name=%s", ticker, meta["name"])
-            return meta
-    return None
-
-
 class MarketDataService:
-    _overview_cache = TTLCache(maxsize=200, ttl=300)
-    _overview_locks: Dict[str, threading.Lock] = {}
-    _history_cache = TTLCache(maxsize=100, ttl=600)
-    _news_cache = TTLCache(maxsize=100, ttl=300)
-    _technical_cache = TTLCache(maxsize=100, ttl=600)
-    _earnings_cache = TTLCache(maxsize=100, ttl=900)
+    _overview_cache = TTLCache(maxsize=200, ttl=60)
+    _history_cache = TTLCache(maxsize=100, ttl=300)
+    _news_cache = TTLCache(maxsize=100, ttl=60)
+    _technical_cache = TTLCache(maxsize=100, ttl=300)
+    _earnings_cache = TTLCache(maxsize=100, ttl=600)
 
     @staticmethod
     def search_stocks(query: str) -> List[StockSearchResult]:
@@ -607,93 +435,18 @@ class MarketDataService:
         return results[:8]
 
     @staticmethod
-    def _get_ticker_lock(ticker: str) -> threading.Lock:
-        if ticker not in MarketDataService._overview_locks:
-            MarketDataService._overview_locks[ticker] = threading.Lock()
-        return MarketDataService._overview_locks[ticker]
-
-    @staticmethod
     def get_stock_overview(ticker: str) -> Optional[StockOverview]:
         ticker_upper = ticker.upper().strip()
-        cached = MarketDataService._overview_cache.get(ticker_upper)
-        if cached is not None:
-            logger.debug("Cache HIT overview for %s", ticker_upper)
-            return cached
-
-        lock = MarketDataService._get_ticker_lock(ticker_upper)
-        with lock:
-            cached = MarketDataService._overview_cache.get(ticker_upper)
-            if cached is not None:
-                logger.debug("Cache HIT overview for %s (after lock)", ticker_upper)
-                return cached
-
-            logger.info("Fetching overview for %s", ticker_upper)
-            result = MarketDataService._build_overview(ticker_upper)
-
-            if result is not None:
-                MarketDataService._overview_cache[ticker_upper] = result
-                logger.info("Overview cached for %s: price=%s name=%s",
-                           ticker_upper, result.current_price, result.name)
-            else:
-                logger.error("All data sources failed for %s", ticker_upper)
-            return result
-
-    @staticmethod
-    def _build_overview(ticker: str) -> Optional[StockOverview]:
-        fast = _fetch_fast_info(ticker)
-        hist = _fetch_history_overview(ticker) if fast is None or not fast.get('current_price') else None
-        search_meta = _fetch_yahoo_search_metadata(ticker)
-        yahoo_overview = _fetch_overview_from_yahoo_direct(ticker)
-
-        price_data = fast or hist
-
-        if not price_data and not yahoo_overview and not search_meta:
-            logger.warning("No data from ANY source for %s", ticker)
-            return None
-
-        overview = StockOverview(ticker=ticker, name=ticker)
-
-        if search_meta:
-            overview.name = search_meta.get("name") or ticker
-            overview.sector = search_meta.get("sector")
-            overview.industry = search_meta.get("industry")
-            overview.exchange = search_meta.get("exchange")
-
-        if yahoo_overview:
-            overview.name = yahoo_overview.name or overview.name
-            overview.description = yahoo_overview.description
-            overview.sector = yahoo_overview.sector or overview.sector
-            overview.industry = yahoo_overview.industry or overview.industry
-            overview.exchange = yahoo_overview.exchange or overview.exchange
-            overview.website = yahoo_overview.website
-            if yahoo_overview.market_cap is not None:
-                overview.market_cap = yahoo_overview.market_cap
-            if yahoo_overview.pe_ratio is not None:
-                overview.pe_ratio = yahoo_overview.pe_ratio
-            if yahoo_overview.dividend_yield is not None:
-                overview.dividend_yield = yahoo_overview.dividend_yield
-            if yahoo_overview.eps is not None:
-                overview.eps = yahoo_overview.eps
-            if yahoo_overview.beta is not None:
-                overview.beta = yahoo_overview.beta
-            if yahoo_overview.avg_volume is not None:
-                overview.avg_volume = yahoo_overview.avg_volume
-            if yahoo_overview.previous_close is not None and overview.previous_close is None:
-                overview.previous_close = yahoo_overview.previous_close
-            if yahoo_overview.current_price is not None and overview.current_price is None:
-                overview.current_price = yahoo_overview.current_price
-
-        if price_data:
-            for field in ('current_price', 'previous_close', 'day_high', 'day_low',
-                          'volume', 'open_price', 'fifty_two_week_high',
-                          'fifty_two_week_low', 'avg_volume', 'market_cap'):
-                val = price_data.get(field)
-                if val is not None:
-                    setattr(overview, field, val)
-
-        logger.info("Overview built for %s: price=%s name=%s sector=%s",
-                   ticker, overview.current_price, overview.name, overview.sector)
-        return overview
+        if ticker_upper in MarketDataService._overview_cache:
+            return MarketDataService._overview_cache[ticker_upper]
+        result = (
+            _fetch_overview_from_finnhub(ticker_upper)
+            or _fetch_overview_from_yahoo_direct(ticker_upper)
+            or _fetch_overview_from_yfinance(ticker_upper)
+        )
+        if result:
+            MarketDataService._overview_cache[ticker_upper] = result
+        return result
 
     @staticmethod
     def get_stock_history(ticker: str, period: str) -> List[StockHistoryPoint]:

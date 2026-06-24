@@ -131,7 +131,7 @@ const FilterSelect = ({ label, value, onChange, options }) => (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2.5 py-2 text-xs text-gray-200 focus:outline-none focus:border-blue-500/50 transition-colors appearance-none"
+      className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2.5 py-2 text-xs text-gray-200 outline-none focus:border-blue-500/50 transition-colors appearance-none"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>
@@ -150,7 +150,7 @@ const RangeInput = ({ label, min, max, onMinChange, onMaxChange, minPlaceholder,
         value={min}
         onChange={(e) => onMinChange(e.target.value)}
         placeholder={minPlaceholder || "Min"}
-        className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
+        className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 transition-colors"
       />
       <span className="text-[10px] text-gray-600">—</span>
       <input
@@ -158,7 +158,7 @@ const RangeInput = ({ label, min, max, onMinChange, onMaxChange, minPlaceholder,
         value={max}
         onChange={(e) => onMaxChange(e.target.value)}
         placeholder={maxPlaceholder || "Max"}
-        className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
+        className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 transition-colors"
       />
     </div>
   </div>
@@ -429,18 +429,18 @@ export const Screener = () => {
   const hasActiveFilters = marketCap || sector || peMin || peMax || divYieldMin || beta || priceMin || priceMax || search || preset;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-xl font-black text-white tracking-tight">AI Stock Screener</h1>
+        <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">AI Stock Screener</h1>
         <p className="text-xs text-gray-500 font-medium mt-1">Discover stocks using quantitative filters.</p>
       </div>
 
       {/* Quick Screens */}
       {!loading && (
-        <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Screens</h3>
-          </div>
+          <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/60">
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Screens</h3>
+            </div>
           <div className="px-4 py-3 overflow-x-auto">
             <div className="flex items-center gap-2 min-w-max">
               {PRESETS.map((p) => {
@@ -464,13 +464,13 @@ export const Screener = () => {
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
         {/* Sidebar */}
-        <div className="lg:w-64 shrink-0 flex flex-col gap-4">
+        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-4">
           {/* Saved Screens */}
           {!loading && (
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
+            <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/60">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Saved Screens</h3>
               </div>
               <div className="p-3 space-y-2">
@@ -522,10 +522,10 @@ export const Screener = () => {
           )}
 
           {/* Filter Panel */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden">
+          <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="w-full flex items-center justify-between px-5 py-3 border-b border-[#242D3D]/40 lg:cursor-default"
+              className="w-full flex items-center justify-between px-5 py-3 border-b border-[#242D3D]/60 lg:cursor-default"
             >
               <div className="flex items-center gap-2">
                 <Search className="w-4 h-4 text-blue-400" />
@@ -568,7 +568,7 @@ export const Screener = () => {
                       value={divYieldMin}
                       onChange={(e) => setDivYieldMin(e.target.value)}
                       placeholder="Min %"
-                      className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
+                      className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 transition-colors"
                     />
                     <span className="text-[10px] text-gray-500">%</span>
                   </div>
@@ -587,7 +587,7 @@ export const Screener = () => {
                         value={savingName}
                         onChange={(e) => setSavingName(e.target.value)}
                         placeholder="Screen name..."
-                        className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2.5 py-2 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
+                        className="w-full bg-[#1C2333] border border-[#242D3D]/60 rounded-lg px-2.5 py-2 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 transition-colors"
                         autoFocus
                         onKeyDown={(e) => { if (e.key === "Enter") saveScreen(); if (e.key === "Escape") { setShowSaveInput(false); setSavingName(""); } }}
                       />
@@ -634,16 +634,17 @@ export const Screener = () => {
         <div className="flex-1 min-w-0">
           {/* AI Top Picks */}
           {!loading && scored.length > 0 && (
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden mb-3">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
+            <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover mb-3">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/60">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">AI Top Picks</h3>
               </div>
               <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {scored.slice(0, 3).map((s) => (
+                {scored.slice(0, 3).map((s, i) => (
                   <button
                     key={s.ticker}
                     onClick={() => navigateToStock(s.ticker)}
-                    className="group bg-[#1C2333]/60 border border-[#242D3D]/60 rounded-xl p-4 text-left hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5 transition-all cursor-pointer"
+                    className="group bg-[#1C2333]/60 border border-[#242D3D]/60 rounded-xl p-4 text-left hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5 transition-all cursor-pointer animate-fade-in-up"
+                    style={{ animationDelay: `${i * 80}ms` }}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div>
@@ -689,7 +690,7 @@ export const Screener = () => {
 
           {/* Rating Summary */}
           {!loading && scored.length > 0 && (
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden mb-3">
+            <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover mb-3">
               <div className="flex items-center justify-around gap-4 px-4 py-2.5">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
@@ -714,14 +715,14 @@ export const Screener = () => {
 
           {/* Search + Export */}
           <div className="flex items-center gap-2 mb-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
+            <div className="relative flex-1 group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none group-focus-within:text-blue-500 transition-colors" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by ticker or company name..."
-                className="w-full bg-[#161B26]/60 border border-[#242D3D]/60 rounded-xl pl-9 pr-3 py-2.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
+                className="w-full bg-[#161B26]/60 border border-[#242D3D]/60 rounded-xl pl-9 pr-3 py-2.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/50 transition-colors"
               />
             </div>
             <div className="relative group">
@@ -747,7 +748,7 @@ export const Screener = () => {
           </div>
 
           {loading ? (
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden">
+            <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover">
               <div className="p-5 space-y-3">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="h-8 bg-[#242D3D]/30 rounded animate-pulse" />
@@ -755,18 +756,18 @@ export const Screener = () => {
               </div>
             </div>
           ) : error ? (
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md p-8 text-center">
+            <div className="glass-card rounded-xl sm:rounded-2xl p-8 text-center glass-card-no-hover">
               <p className="text-xs text-red-400 font-medium">{error}</p>
             </div>
           ) : scored.length === 0 ? (
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md p-8 text-center">
+            <div className="glass-card rounded-xl sm:rounded-2xl p-8 text-center glass-card-no-hover">
               <p className="text-xs text-gray-500 font-medium">No stocks match current filters.</p>
             </div>
           ) : (
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden">
+            <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 z-10 bg-[#161B26]/95 backdrop-blur-sm shadow-[0_1px_0_0_rgba(36,45,61,0.4)]">
+                  <thead className="sticky top-0 z-10 bg-[#161B26]/95 backdrop-blur-sm">
                     <tr>
                       {[
                         { label: "QL Score", field: "_score", align: "center" },
@@ -808,7 +809,7 @@ export const Screener = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#242D3D]/30">
-                    {scored.map((s) => {
+                    {scored.map((s, index) => {
                       const dailyPct = s.current_price != null && s.previous_close != null && s.previous_close > 0
                         ? ((s.current_price - s.previous_close) / s.previous_close) * 100
                         : null;
@@ -816,7 +817,8 @@ export const Screener = () => {
                         <tr
                           key={s.ticker}
                           onClick={() => navigateToStock(s.ticker)}
-                          className="hover:bg-blue-500/5 cursor-pointer transition-colors"
+                          className="hover:bg-blue-500/5 cursor-pointer transition-colors animate-fade-in-up"
+                          style={{ animationDelay: `${index * 20}ms` }}
                         >
                           <td className="px-3 py-3 text-center">
                             <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full border-2 text-[10px] font-black ${getScoreColor(s._score)} ${getScoreRing(s._score)}`}>

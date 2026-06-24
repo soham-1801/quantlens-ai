@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     FINNHUB_API_KEY: str = ""
 
     # CORS — comma-separated list of allowed origins
-    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,https://quantlens-ai.vercel.app"
 
     # Allow reading from .env file
     model_config = SettingsConfigDict(

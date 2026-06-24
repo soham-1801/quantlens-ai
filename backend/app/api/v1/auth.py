@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
@@ -7,6 +7,7 @@ from jose import jwt, JWTError
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import verify_password, get_password_hash, create_access_token
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.schemas.user import UserCreate, User as UserSchema, Token, TokenPayload
 
@@ -40,7 +41,8 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     return user
 
 @router.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
-def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register_user(request: Request, user_in: UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user.
     """
@@ -65,7 +67,9 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     return db_user
 
 @router.post("/token", response_model=Token)
+@limiter.limit("10/minute")
 def login_for_access_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -93,7 +97,8 @@ def login_for_access_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserSchema)
-def read_current_user(current_user: User = Depends(get_current_user)):
+@limiter.limit("30/minute")
+def read_current_user(request: Request, current_user: User = Depends(get_current_user)):
     """
     Get current logged in user details.
     """

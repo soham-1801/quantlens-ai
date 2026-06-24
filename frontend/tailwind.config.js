@@ -6,6 +6,9 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        'xs': '480px',
+      },
       colors: {
         dark: {
           bg: "#0B0F19",       // Deep dark slate-navy

@@ -25,42 +25,49 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
   ];
 
   const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div
-          className="backdrop-blur-md border border-[#2E3A50]/70 rounded-md z-50"
-          style={{
-            background: "rgba(11,15,25,0.92)",
-            padding: "5px 9px",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-          }}
-        >
-          <p className="text-gray-500 mb-[2px] text-[9px] font-semibold tracking-wide">{label}</p>
-          {payload.map((entry, idx) => (
-            <p
-              key={idx}
-              className="font-black tabular-nums text-[11px]"
-              style={{ color: entry.color }}
-            >
-              {entry.name}:{" "}
-              {Number.isFinite(entry.value) ? (comparison ? `${entry.value >= 0 ? "+" : ""}${entry.value.toFixed(2)}%` : `$${entry.value.toFixed(2)}`) : "N/A"}
-            </p>
-          ))}
-        </div>
-      );
-    }
-    return null;
+    if (!active || !payload || !payload.length) return null;
+    const validPayload = payload.filter(p => p.value != null && Number.isFinite(p.value));
+    if (!validPayload.length) return null;
+    return (
+      <div
+        className="backdrop-blur-md border border-[#2E3A50]/70 rounded-md z-50"
+        style={{
+          background: "rgba(11,15,25,0.92)",
+          padding: "5px 9px",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+        }}
+      >
+        <p className="text-gray-500 mb-[2px] text-[9px] font-semibold tracking-wide">{label}</p>
+        {validPayload.map((entry, idx) => (
+          <p
+            key={idx}
+            className="font-black tabular-nums text-[11px]"
+            style={{ color: entry.color }}
+          >
+            {entry.name}:{" "}
+            {comparison
+              ? `${entry.value >= 0 ? "+" : ""}${entry.value.toFixed(2)}%`
+              : `$${entry.value.toFixed(2)}`}
+          </p>
+        ))}
+      </div>
+    );
   };
 
-  const CustomCursor = ({ x, y, height }) => (
-    <line
-      x1={x} y1={y} x2={x} y2={y + height}
-      stroke="#3B82F6"
-      strokeOpacity={0.18}
-      strokeWidth={1}
-      strokeDasharray="3 2"
-    />
-  );
+  const CustomCursor = ({ x, y, height }) => {
+    if (x == null || y == null || height == null || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(height)) {
+      return null;
+    }
+    return (
+      <line
+        x1={x} y1={y} x2={x} y2={y + height}
+        stroke="#3B82F6"
+        strokeOpacity={0.18}
+        strokeWidth={1}
+        strokeDasharray="3 2"
+      />
+    );
+  };
 
   const renderAreas = () => {
     if (comparison && tickers) {
@@ -115,10 +122,22 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
         </div>
       </div>
 
-      <div className="w-full" style={{ height: 348 }}>
-        {history && history.length > 0 ? (
+      <div className="w-full" style={{ height: "clamp(200px, 40vh, 400px)" }}>
+        {(() => {
+          const cleanData = Array.isArray(history)
+            ? history.filter(p => p && typeof p.close === 'number' && Number.isFinite(p.close) && p.close > 0)
+            : [];
+          const hasValidData = cleanData.length > 1;
+          const allClose = cleanData.map(p => p.close);
+          const minClose = allClose.length > 0 ? Math.min(...allClose) : 0;
+          const maxClose = allClose.length > 0 ? Math.max(...allClose) : 100;
+          const pad = maxClose > minClose ? (maxClose - minClose) * 0.05 : maxClose * 0.02 || 1;
+          const chartDomain = hasValidData
+            ? [Math.max(0, minClose - pad), maxClose + pad]
+            : [0, 100];
+          return hasValidData ? (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={history} margin={{ top: 8, right: 4, left: -20, bottom: 2 }}>
+            <AreaChart data={cleanData} margin={{ top: 8, right: 4, left: -20, bottom: 2 }}>
               <defs>
                 <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.18} />
@@ -151,8 +170,8 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
                 tick={{ fill: "#4B5563", fontSize: 9 }}
                 tickLine={false}
                 axisLine={false}
-                domain={["auto", "auto"]}
-                tickFormatter={(v) => Number.isFinite(v) ? (comparison ? `${v.toFixed(1)}%` : `$${v.toFixed(0)}`) : "N/A"}
+                domain={chartDomain}
+                tickFormatter={(v) => Number.isFinite(v) ? (comparison ? `${v.toFixed(1)}%` : `$${v.toFixed(0)}`) : ""}
                 width={46}
               />
               <Tooltip content={<CustomTooltip />} cursor={<CustomCursor />} />
@@ -170,7 +189,8 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
           <div className="h-full flex items-center justify-center text-[11px] text-gray-600 font-medium">
             No price history available.
           </div>
-        )}
+        );
+        })()}
       </div>
     </div>
   );

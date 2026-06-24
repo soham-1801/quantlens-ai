@@ -231,9 +231,9 @@ export const StockDetail = ({ ticker }) => {
   const showNav = overview && !loading;
 
   return (
-    <div className="space-y-6 max-w-full">
+    <div className="space-y-6 max-w-full animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl px-4 py-2.5 backdrop-blur-md" id="section-overview">
+      <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3" id="section-overview">
         <div className="flex items-start gap-3 min-w-0">
           <button
             onClick={goBack}
@@ -249,7 +249,9 @@ export const StockDetail = ({ ticker }) => {
                 <h1 className="text-2xl font-black text-white tracking-tight leading-none">
                   {overview.ticker}
                 </h1>
-                <p className="text-xs text-gray-300 font-medium mt-0.5 line-clamp-2">{overview.name}</p>
+                {overview.name && overview.name.toUpperCase() !== overview.ticker.toUpperCase() && (
+                  <p className="text-xs text-gray-300 font-medium mt-0.5 line-clamp-2">{overview.name}</p>
+                )}
                 {metaParts.length > 0 && (
                   <p className="text-[10px] text-gray-500 mt-0.5 truncate" title={metaParts.join(" • ")}>{metaParts.join(" • ")}</p>
                 )}
@@ -285,13 +287,13 @@ export const StockDetail = ({ ticker }) => {
 
       {/* Section Navigation */}
       {showNav && (
-        <div className="sticky top-0 z-40 -mx-6 px-6 bg-[#0B0F19]/90 backdrop-blur-xl border-b border-[#242D3D]/60 py-0">
-          <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="sticky top-0 z-40 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 bg-[#0B0F19]/90 backdrop-blur-xl border-b border-[#242D3D]/60 py-0">
+          <div className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto">
             {NAV_TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => scrollToSection(tab.id)}
-                className="text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-200 transition-colors px-3 py-2.5 whitespace-nowrap shrink-0"
+                className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-200 transition-colors px-2 sm:px-3 py-2.5 sm:py-3 whitespace-nowrap shrink-0 min-h-[36px]"
               >
                 {tab.label}
               </button>
@@ -304,17 +306,17 @@ export const StockDetail = ({ ticker }) => {
         <>
           {/* KPI strip */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-2 backdrop-blur-md min-h-[80px]">
-              <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</span>
-              <p className="text-sm font-black text-white mt-0.5 tabular-nums">
+            <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover">
+              <span className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</span>
+              <p className="text-xs sm:text-sm md:text-base font-black text-white mt-0.5 tabular-nums">
                 {overview.current_price != null && Number.isFinite(overview.current_price) ? `$${overview.current_price.toFixed(2)}` : "N/A"}
               </p>
             </div>
 
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-2 backdrop-blur-md min-h-[80px]">
-              <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Daily</span>
+            <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover">
+              <span className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-wider">Daily</span>
               <p
-                className={`text-sm font-black mt-0.5 tabular-nums ${
+                className={`text-xs sm:text-sm md:text-base font-black mt-0.5 tabular-nums ${
                   dailyChange !== null
                     ? dailyChange >= 0
                       ? "text-emerald-400"
@@ -326,21 +328,21 @@ export const StockDetail = ({ ticker }) => {
               </p>
             </div>
 
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-2 backdrop-blur-md min-h-[80px]">
-              <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Mkt Cap</span>
-              <p className="text-sm font-black text-white mt-0.5 tabular-nums truncate">
+            <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover">
+              <span className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-wider">Mkt Cap</span>
+              <p className="text-xs sm:text-sm md:text-base font-black text-white mt-0.5 tabular-nums truncate">
                 {formatMarketCap(overview.market_cap)}
               </p>
             </div>
 
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-2 backdrop-blur-md min-h-[80px]">
-              <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">P/E</span>
-              <p className="text-sm font-black text-white mt-0.5 tabular-nums">
+            <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover">
+              <span className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-wider">P/E</span>
+              <p className="text-xs sm:text-sm md:text-base font-black text-white mt-0.5 tabular-nums">
                 {overview.pe_ratio != null && Number.isFinite(overview.pe_ratio) ? overview.pe_ratio.toFixed(2) : "N/A"}
               </p>
             </div>
 
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-2 backdrop-blur-md col-span-1 min-h-[80px]">
+            <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover col-span-2 sm:col-span-1">
               <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Sentiment</span>
               {hasSentimentData ? (
                 <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
@@ -379,7 +381,7 @@ export const StockDetail = ({ ticker }) => {
           </div>
 
           {/* Performance snapshot panel */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl px-2.5 py-1 backdrop-blur-md flex flex-wrap items-center gap-2">
+          <div className="glass-card rounded-xl py-1.5 px-3 glass-card-no-hover flex flex-wrap items-center gap-2">
             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider shrink-0 mr-1">
               Performance
             </span>
@@ -391,9 +393,9 @@ export const StockDetail = ({ ticker }) => {
       )}
 
       {/* Main workspace: chart + news (left) | overview (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-2.5 gap-y-2.5 lg:gap-y-0 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-x-4 items-start">
         {/* Left column: chart (with optional no-news strip inside) + full sentiment when news exists */}
-        <div className="lg:col-span-2 min-w-0 flex flex-col gap-2 order-1">
+        <div className="lg:col-span-2 min-w-0 flex flex-col gap-3 md:gap-4 order-1">
           <StockChart
             history={history}
             period={period}
@@ -402,9 +404,9 @@ export const StockDetail = ({ ticker }) => {
           {hasSentimentData && <SentimentCards sentiment={sentiment} />}
 
           {/* Bottom grid: News + Sentiment Overview */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 mt-4" id="section-news">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 mt-4 scroll-mt-20" id="section-news">
             {/* News Section */}
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md" id="section-news-card">
+            <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden" id="section-news-card">
               <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
                 <Newspaper className="w-4 h-4 text-blue-400" />
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">News</h3>
@@ -467,7 +469,7 @@ export const StockDetail = ({ ticker }) => {
             </div>
 
             {/* Sentiment Overview Card */}
-            <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md" id="section-sentiment">
+            <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden" id="section-sentiment">
               <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
                 <div className="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 via-gray-400 to-red-400" />
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Sentiment Overview</h3>
@@ -554,7 +556,7 @@ export const StockDetail = ({ ticker }) => {
           </div>
 
           {/* AI Research Summary */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md mt-6" id="section-ai-research">
+          <div className="glass-card rounded-xl sm:rounded-2xl mt-6 scroll-mt-20 overflow-hidden" id="section-ai-research">
             <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
               <Lightbulb className="w-4 h-4 text-amber-400" />
               <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">AI Research Summary</h3>
@@ -644,7 +646,7 @@ export const StockDetail = ({ ticker }) => {
           </div>
 
           {/* Earnings Intelligence */}
-          <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md mt-6" id="section-earnings">
+          <div className="glass-card rounded-xl sm:rounded-2xl mt-6 scroll-mt-20 overflow-hidden" id="section-earnings">
             <div className="flex items-center justify-between px-5 py-3 border-b border-[#242D3D]/40">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded flex items-center justify-center text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">$</div>
@@ -673,7 +675,7 @@ export const StockDetail = ({ ticker }) => {
               {earningsLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-4 space-y-2">
+                    <div key={i} className="glass-card rounded-xl p-3 sm:p-4 space-y-2 glass-card-no-hover">
                       <div className="h-3 bg-[#242D3D]/40 rounded animate-pulse w-3/4" />
                       <div className="h-6 bg-[#242D3D]/30 rounded animate-pulse w-1/2" />
                     </div>
@@ -742,7 +744,7 @@ export const StockDetail = ({ ticker }) => {
                       {metrics.map((m) => (
                         <div
                           key={m.label}
-                          className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-xl p-4 flex flex-col justify-between h-[88px]"
+                          className="glass-card rounded-xl p-3 sm:p-4 flex flex-col justify-between h-[88px] glass-card-no-hover"
                         >
                           <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{m.label}</p>
                           <div className="flex items-center gap-1.5 mt-1">
@@ -779,7 +781,7 @@ export const StockDetail = ({ ticker }) => {
         </div>
 
         {/* Right column: overview sidebar — sticky to chart top, natural height */}
-        <div className="lg:col-span-1 min-w-0 order-2 lg:sticky lg:top-0 z-10">
+        <div className="lg:col-span-1 min-w-0 order-first lg:order-2 lg:sticky lg:top-0 z-10 mb-3 lg:mb-0">
           <StockOverview overview={overview} />
         </div>
       </div>

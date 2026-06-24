@@ -151,29 +151,28 @@ export const Compare = () => {
   const showResult = stockA && stockB && overviewA && overviewB && !fetching;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto animate-fade-in">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600/10 via-blue-500/5 to-transparent border border-blue-500/20 p-6 rounded-3xl relative overflow-hidden backdrop-blur-md">
-        <div className="absolute top-0 right-0 w-56 h-56 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600/8 via-blue-500/4 to-transparent border border-blue-500/15 p-5 sm:p-6 md:p-7 rounded-2xl sm:rounded-3xl">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-blue-600/10 border border-blue-500/20">
             <GitCompare className="w-5 h-5 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-xl font-extrabold text-gray-100 leading-none">Stock Comparison</h2>
-            <p className="text-xs text-gray-400 font-light mt-1">Select two stocks to compare side by side</p>
+            <h2 className="text-lg sm:text-xl font-extrabold text-gray-100 leading-none tracking-tight">Stock Comparison</h2>
+            <p className="text-xs text-gray-500 font-light mt-1">Select two stocks to compare side by side</p>
           </div>
         </div>
       </div>
 
       {/* Stock Selectors */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <div>
           <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5 block">Stock A</label>
           <select
             value={stockA}
             onChange={(e) => { setStockA(e.target.value); setOverviewA(null); setOverviewB(null); }}
-            className="w-full bg-[#161B26]/60 border border-[#242D3D]/60 rounded-xl px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-blue-500/50 transition-colors appearance-none cursor-pointer"
+            className="w-full bg-[#161B26]/60 border border-[#242D3D]/60 rounded-xl px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-blue-500/50 focus-visible:ring-2 focus-visible:ring-blue-500/40 transition-colors appearance-none cursor-pointer"
           >
             <option value="">{wlLoading ? "Loading watchlist…" : options.length === 0 ? "Watchlist is empty" : "Select a stock…"}</option>
             {availableA.map((o) => (
@@ -186,7 +185,7 @@ export const Compare = () => {
           <select
             value={stockB}
             onChange={(e) => { setStockB(e.target.value); setOverviewA(null); setOverviewB(null); }}
-            className="w-full bg-[#161B26]/60 border border-[#242D3D]/60 rounded-xl px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-blue-500/50 transition-colors appearance-none cursor-pointer"
+            className="w-full bg-[#161B26]/60 border border-[#242D3D]/60 rounded-xl px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-blue-500/50 focus-visible:ring-2 focus-visible:ring-blue-500/40 transition-colors appearance-none cursor-pointer"
           >
             <option value="">{wlLoading ? "Loading watchlist…" : options.length === 0 ? "Watchlist is empty" : "Select a stock…"}</option>
             {availableB.map((o) => (
@@ -212,9 +211,9 @@ export const Compare = () => {
 
       {/* Empty State */}
       {showEmpty && !fetching && !error && (
-        <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-3xl backdrop-blur-md py-16 flex flex-col items-center text-center space-y-3">
+        <div className="glass-card rounded-xl sm:rounded-3xl py-16 px-6 flex flex-col items-center text-center space-y-3 glass-card-no-hover">
           <div className="p-4 rounded-2xl bg-[#0B0F19]/60 border border-[#242D3D]/60">
-            <ArrowLeftRight className="w-8 h-8 text-gray-600" />
+            <ArrowLeftRight className="w-8 h-8 text-gray-500" />
           </div>
           <p className="text-sm font-semibold text-gray-300">Select two stocks to compare.</p>
           <p className="text-xs text-gray-500 font-light max-w-xs">Pick two stocks from your watchlist above to view a side-by-side comparison.</p>
@@ -225,8 +224,8 @@ export const Compare = () => {
       {showResult && (
         <>
           {/* Desktop Table */}
-          <div className="hidden md:block bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl backdrop-blur-md overflow-hidden">
-            <div className="px-5 py-3 border-b border-[#242D3D]/40 bg-[#111622]/50">
+          <div className="hidden md:block glass-card rounded-xl sm:rounded-2xl overflow-hidden glass-card-no-hover">
+            <div className="px-5 py-3 border-b border-[#242D3D]/60 bg-[#111622]/60">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <StockLogo ticker={stockA} className="w-7 h-7" />
@@ -274,7 +273,7 @@ export const Compare = () => {
               const a = metricValue(overviewA, changeA, m.key);
               const b = metricValue(overviewB, changeB, m.key);
               return (
-                <div key={m.key} className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
+                <div key={m.key} className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4">
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-3">{m.label}</p>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">

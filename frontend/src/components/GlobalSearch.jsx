@@ -156,7 +156,7 @@ export const GlobalSearch = () => {
   const showRecent = isSearchFocused && searchQuery.trim().length === 0 && recentSearches.length > 0;
 
   return (
-    <div className="relative z-50 w-full max-w-[180px] xs:max-w-[220px] sm:max-w-xs md:max-w-sm" ref={searchRef}>
+    <div className="relative z-50 w-full min-w-0" ref={searchRef}>
       <div className="flex items-center gap-2 bg-[#161B26]/60 border border-[#242D3D]/60 rounded-xl px-3 py-1.5 focus-within:border-blue-500/50 transition-all w-full">
         <Search className="w-3.5 h-3.5 text-gray-500 shrink-0" />
         <input
@@ -175,7 +175,7 @@ export const GlobalSearch = () => {
       </div>
 
       {isSearchFocused && (
-        <div className="absolute top-full right-0 md:left-0 mt-1.5 bg-[#0F131C]/95 border border-[#2E3C54]/60 rounded-xl shadow-2xl z-50 backdrop-blur-xl overflow-hidden divide-y divide-[#242D3D]/50 w-[280px] xs:w-[320px] sm:w-[360px] md:w-full max-h-64 overflow-y-auto">
+          <div className="absolute top-full right-0 md:left-0 mt-1.5 bg-[#0F131C]/95 border border-[#2E3C54]/60 rounded-xl shadow-2xl z-50 backdrop-blur-xl overflow-hidden divide-y divide-[#242D3D]/50 w-screen max-w-[320px] xs:max-w-[360px] sm:max-w-[400px] md:max-w-md lg:max-w-lg right-0 md:right-auto max-h-64 overflow-y-auto">
           {/* Loading state */}
           {searchLoading && searchQuery.trim().length > 0 && (
             <div className="px-4 py-3 text-xs text-gray-400 font-medium flex items-center gap-2">

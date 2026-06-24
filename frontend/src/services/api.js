@@ -29,6 +29,11 @@ const request = async (endpoint, options = {}) => {
     const data = await response.json();
 
     if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("quantlens_token");
+        window.location.hash = "#/login";
+        throw new Error("Session expired. Please log in again.");
+      }
       const errorMsg = data.detail || "An error occurred with the network request.";
       throw new Error(errorMsg);
     }

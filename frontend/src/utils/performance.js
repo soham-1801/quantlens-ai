@@ -17,6 +17,7 @@ const findClosestPoint = (history, targetDate) => {
 
 const calcReturn = (current, startPrice) => {
   if (current == null || startPrice == null || startPrice <= 0) return null;
+  if (!Number.isFinite(current) || !Number.isFinite(startPrice)) return null;
   return ((current - startPrice) / startPrice) * 100;
 };
 

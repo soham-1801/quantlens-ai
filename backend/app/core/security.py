@@ -1,8 +1,11 @@
+import logging
 import bcrypt
 from datetime import datetime, timedelta
 from typing import Any, Union
 from jose import jwt
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
@@ -13,7 +16,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.checkpw(password_bytes, hashed_bytes)
     except Exception as e:
-        print(f"Error during password verification: {e}")
+        logger.error("Password verification error: %s", e)
         return False
 
 def get_password_hash(password: str) -> str:
