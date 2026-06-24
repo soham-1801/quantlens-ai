@@ -8,7 +8,7 @@ class Watchlist(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    ticker = Column(String(10), index=True, nullable=False)
+    ticker = Column(String(32), index=True, nullable=False)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Persisted overview fields (populated on add / refresh)
@@ -23,6 +23,7 @@ class Watchlist(Base):
     current_price = Column(Float, nullable=True)
     previous_close = Column(Float, nullable=True)
     volume = Column(BigInteger, nullable=True)
+    currency = Column(String(10), nullable=True, default="USD")
     website = Column(Text, nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
     refresh_error = Column(Text, nullable=True)

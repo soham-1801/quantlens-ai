@@ -18,12 +18,50 @@ from app.models.sentiment_cache import SentimentCache
 # Auto-create tables if they don't exist (primarily for SQLite development)
 Base.metadata.create_all(bind=engine)
 
+from fastapi.openapi.utils import get_openapi
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="AI-powered Stock Market Research Assistant - Foundation Setup",
     version="1.0.0",
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    if "components" not in openapi_schema:
+        openapi_schema["components"] = {}
+    if "securitySchemes" not in openapi_schema["components"]:
+        openapi_schema["components"]["securitySchemes"] = {}
+        
+    openapi_schema["components"]["securitySchemes"]["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter your JWT Bearer token directly."
+    }
+    
+    # Add BearerAuth as an alternative to existing security requirements for all routes
+    for path_data in openapi_schema.get("paths", {}).values():
+        for method_data in path_data.values():
+            security = method_data.get("security")
+            if security is not None:
+                # If there are any security requirements, append BearerAuth as an alternative
+                if not any("BearerAuth" in sec for sec in security):
+                    security.append({"BearerAuth": []})
+                    method_data["security"] = security
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

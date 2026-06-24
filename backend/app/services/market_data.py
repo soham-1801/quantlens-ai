@@ -35,6 +35,20 @@ def safe_int(val) -> Optional[int]:
     except (ValueError, TypeError):
         return None
 
+def normalize_dividend_yield(val: Any, is_percentage: bool = False) -> Optional[float]:
+    if val is None:
+        return None
+    f_val = safe_float(val)
+    if f_val is None:
+        return None
+    if is_percentage:
+        return f_val / 100.0
+    # Defensive check: if somehow a decimal yield provider returns a value > 1.0 (e.g. 2.5 meaning 2.5%),
+    # we normalize it. Otherwise we keep the decimal fraction (e.g. 0.025).
+    if f_val > 1.0:
+        return f_val / 100.0
+    return f_val
+
 def _yahoo_get_json(url: str, timeout: int = 10) -> Optional[dict]:
     for attempt in range(2):
         try:
@@ -76,10 +90,15 @@ def _finnhub_stock_profile(ticker: str) -> Optional[dict]:
     return None
 
 def _finnhub_earnings(ticker: str) -> Optional[list]:
-    data = _finnhub_get("earnings-calendar", {"symbol": ticker, "from": datetime.now().strftime("%Y-%m-%d")})
-    if isinstance(data, list) and len(data) > 0:
-        return data
+    from_date = datetime.now().strftime("%Y-%m-%d")
+    to_date = (datetime.now() + timedelta(days=90)).strftime("%Y-%m-%d")
+    data = _finnhub_get("calendar/earnings", {"symbol": ticker, "from": from_date, "to": to_date})
+    if data and isinstance(data, dict) and "earningsCalendar" in data:
+        return data["earningsCalendar"]
     return None
+
+def _finnhub_surprises(ticker: str) -> Optional[list]:
+    return _finnhub_get("stock/earnings", {"symbol": ticker, "limit": 4})
 
 def _finnhub_metric(ticker: str) -> Optional[dict]:
     data = _finnhub_get("stock/metric", {"symbol": ticker, "metric": "all"})
@@ -94,6 +113,14 @@ def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
         return None
     cap_raw = profile.get("marketCapitalization")
     market_cap = (safe_int(cap_raw) * 1_000_000) if cap_raw is not None else None
+    
+    raw_yield = metric.get("dividendYieldIndicatedAnnual") if metric else None
+    dividend_yield = normalize_dividend_yield(raw_yield, is_percentage=True)
+    
+    currency = profile.get("currency")
+    if not currency:
+        currency = "INR" if (ticker.upper().endswith(".NS") or ticker.upper().endswith(".BO")) else "USD"
+        
     return StockOverview(
         ticker=profile.get("ticker", ticker).upper(),
         name=profile.get("name", ticker),
@@ -104,7 +131,8 @@ def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
         website=profile.get("weburl"),
         market_cap=market_cap,
         pe_ratio=safe_float(metric.get("peTTM") if metric else None),
-        dividend_yield=safe_float(metric.get("dividendYieldIndicatedAnnual") if metric else None),
+        dividend_yield=dividend_yield,
+        currency=currency,
         current_price=None,
         day_high=None,
         day_low=None,
@@ -153,11 +181,11 @@ def _fetch_overview_from_yahoo_direct(ticker: str) -> Optional[StockOverview]:
 
     current_price = g(sd, "regularMarketPrice", "raw") or g(pr, "regularMarketPrice", "raw") or g(sd, "previousClose", "raw")
     raw_yield = g(sd, "dividendYield", "raw")
-    dividend_yield = None
-    if raw_yield is not None:
-        val = safe_float(raw_yield)
-        if val is not None:
-            dividend_yield = val
+    dividend_yield = normalize_dividend_yield(raw_yield, is_percentage=False)
+
+    currency = pr.get("currency") or sd.get("currency")
+    if not currency:
+        currency = "INR" if (ticker.upper().endswith(".NS") or ticker.upper().endswith(".BO")) else "USD"
 
     return StockOverview(
         ticker=ticker.upper(),
@@ -170,6 +198,7 @@ def _fetch_overview_from_yahoo_direct(ticker: str) -> Optional[StockOverview]:
         market_cap=safe_int(g(pr, "marketCap", "raw") or g(sd, "marketCap", "raw")),
         pe_ratio=safe_float(g(dks, "trailingPE", "raw") or g(sd, "forwardPE", "raw")),
         dividend_yield=dividend_yield,
+        currency=currency,
         current_price=safe_float(current_price),
         day_high=safe_float(g(sd, "dayHigh", "raw")),
         day_low=safe_float(g(sd, "dayLow", "raw")),
@@ -196,11 +225,17 @@ def _fetch_overview_from_yfinance(ticker: str) -> Optional[StockOverview]:
             info.get("previousClose")
         )
         raw_yield = info.get("dividendYield")
-        dividend_yield = None
-        if raw_yield is not None:
-            val = safe_float(raw_yield)
-            if val is not None:
-                dividend_yield = val / 100.0
+        dividend_yield = normalize_dividend_yield(raw_yield, is_percentage=False)
+        
+        currency = info.get("currency")
+        if not currency:
+            try:
+                currency = getattr(ticker_obj, "fast_info", {}).get("currency")
+            except Exception:
+                pass
+        if not currency:
+            currency = "INR" if (ticker.upper().endswith(".NS") or ticker.upper().endswith(".BO")) else "USD"
+
         return StockOverview(
             ticker=info.get("symbol", ticker).upper(),
             name=info.get("longName") or info.get("shortName") or ticker,
@@ -212,6 +247,7 @@ def _fetch_overview_from_yfinance(ticker: str) -> Optional[StockOverview]:
             market_cap=safe_int(info.get("marketCap")),
             pe_ratio=safe_float(info.get("trailingPE") or info.get("forwardPE")),
             dividend_yield=dividend_yield,
+            currency=currency,
             current_price=safe_float(current_price),
             day_high=safe_float(info.get("dayHigh") or info.get("regularMarketDayHigh")),
             day_low=safe_float(info.get("dayLow") or info.get("regularMarketDayLow")),
@@ -238,10 +274,10 @@ def _fetch_history_yfinance(ticker: str, yf_period: str, yf_interval: str) -> Op
     return None
 
 def _fetch_earnings_yahoo_direct(ticker: str) -> Optional[dict]:
-    url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=earnings,earningsHistory,financialData"
+    url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=earnings,earningsHistory,financialData,calendarEvents"
     data = _yahoo_get_json(url)
     if not data:
-        url2 = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=earnings,earningsHistory,financialData"
+        url2 = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=earnings,earningsHistory,financialData,calendarEvents"
         data = _yahoo_get_json(url2)
     if not data:
         return None
@@ -249,52 +285,111 @@ def _fetch_earnings_yahoo_direct(ticker: str) -> Optional[dict]:
         qs = data["quoteSummary"]["result"][0]
     except (KeyError, IndexError, TypeError):
         return None
-    earnings = qs.get("earnings", {}) or {}
-    fd = qs.get("financialData", {}) or {}
 
-    def g(obj, key):
-        if not obj:
-            return None
-        v = obj.get(key, {})
-        if isinstance(v, dict) and "raw" in v:
-            return v["raw"]
+    calendar = qs.get("calendarEvents", {}) or {}
+    cal_earnings = calendar.get("earnings", {}) or {}
+    fd = qs.get("financialData", {}) or {}
+    eh = qs.get("earningsHistory", {}) or {}
+    eh_history = eh.get("history", []) or []
+
+    def g(obj, *keys):
+        for k in keys:
+            obj = obj.get(k, {}) if obj else {}
+            if isinstance(obj, dict) and "raw" in obj:
+                return obj["raw"]
         return None
 
-    eps_estimate = g(fd, "epsForward") or g(fd, "epsTrailingTwelveMonths")
-    revenue_estimate = g(fd, "revenueEstimate") or g(fd, "revenuePerShare")
-    prev_eps = None
-    earnings_history = earnings.get("earningsHistory", [])
-    if isinstance(earnings_history, list) and len(earnings_history) > 0:
-        latest = earnings_history[-1] or {}
-        prev_eps = g(latest, "epsActual")
-
+    # Next earnings date
     next_date = None
-    earnings_chart = earnings.get("earningsChart", {}) or {}
-    quarterly = earnings_chart.get("quarterly", [])
-    if isinstance(quarterly, list) and len(quarterly) > 0:
-        next_q = quarterly[-1] or {}
-        next_date = next_q.get("date")
+    date_list = cal_earnings.get("earningsDate")
+    if isinstance(date_list, list) and len(date_list) > 0:
+        next_date = date_list[0].get("fmt")
+
+    # EPS and Revenue Estimates
+    eps_estimate = g(cal_earnings, "earningsAverage") or g(fd, "epsForward")
+    revenue_estimate = g(cal_earnings, "revenueAverage")
+
+    # Previous EPS and Surprise
+    prev_eps = None
+    surprise = None
+    if isinstance(eh_history, list) and len(eh_history) > 0:
+        latest_eh = eh_history[-1] or {}
+        prev_eps = g(latest_eh, "epsActual")
+        raw_surprise = g(latest_eh, "surprisePercent")
+        if raw_surprise is not None:
+            surprise = raw_surprise * 100.0  # convert to percent
 
     return {
         "next_earnings_date": next_date or "Est. within 45 days",
         "revenue_estimate": safe_float(revenue_estimate),
         "eps_estimate": safe_float(eps_estimate),
         "previous_eps": safe_float(prev_eps),
-        "earnings_surprise": None
+        "earnings_surprise": safe_float(surprise)
     }
 
 def _fetch_earnings_finnhub(ticker: str) -> Optional[dict]:
-    data = _finnhub_earnings(ticker)
-    if not data:
+    cal_data = _finnhub_earnings(ticker)
+    next_date = None
+    eps_est = None
+    rev_est = None
+    if cal_data:
+        latest = cal_data[0]
+        next_date = latest.get("date")
+        eps_est = safe_float(latest.get("epsEstimate"))
+        rev_est = safe_float(latest.get("revenueEstimate"))
+
+    # Fetch past surprises to get previous EPS and surprise
+    surprises = _finnhub_surprises(ticker)
+    prev_eps = None
+    surprise = None
+    if surprises and isinstance(surprises, list) and len(surprises) > 0:
+        last_surprise = surprises[0]
+        prev_eps = safe_float(last_surprise.get("actual"))
+        surprise = safe_float(last_surprise.get("surprisePercent") or last_surprise.get("surprise"))
+
+    if not next_date and prev_eps is None:
         return None
-    latest = data[0]
+
     return {
-        "next_earnings_date": latest.get("date"),
-        "revenue_estimate": safe_float(latest.get("revenueEstimate")),
-        "eps_estimate": safe_float(latest.get("epsEstimate")),
-        "previous_eps": safe_float(latest.get("previousEPS")),
-        "earnings_surprise": safe_float(latest.get("surprise"))
+        "next_earnings_date": next_date or "Est. within 45 days",
+        "revenue_estimate": rev_est,
+        "eps_estimate": eps_est,
+        "previous_eps": prev_eps,
+        "earnings_surprise": surprise
     }
+
+def _fetch_earnings_yfinance(ticker: str) -> Optional[dict]:
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        calendar = getattr(ticker_obj, "calendar", None)
+        if not calendar or not isinstance(calendar, dict):
+            return None
+        
+        next_date = None
+        dates = calendar.get("Earnings Date")
+        if isinstance(dates, list) and len(dates) > 0:
+            import datetime
+            d = dates[0]
+            if isinstance(d, datetime.date):
+                next_date = d.strftime("%Y-%m-%d")
+            else:
+                next_date = str(d)
+        
+        eps_est = calendar.get("Earnings Average")
+        rev_est = calendar.get("Revenue Average")
+        
+        if not next_date and eps_est is None and rev_est is None:
+            return None
+            
+        return {
+            "next_earnings_date": next_date or "Est. within 45 days",
+            "revenue_estimate": safe_float(rev_est),
+            "eps_estimate": safe_float(eps_est),
+            "previous_eps": None,
+            "earnings_surprise": None
+        }
+    except Exception:
+        return None
 
 def _fetch_news_yahoo_direct(ticker: str) -> Optional[List[StockNewsArticle]]:
     url = f"https://query2.finance.yahoo.com/v1/finance/search?q={ticker}&newsCount=20"
@@ -567,6 +662,7 @@ class MarketDataService:
         result = (
             _fetch_earnings_finnhub(ticker_upper)
             or _fetch_earnings_yahoo_direct(ticker_upper)
+            or _fetch_earnings_yfinance(ticker_upper)
         )
         if result:
             MarketDataService._earnings_cache[ticker_upper] = result

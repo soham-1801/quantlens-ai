@@ -21,15 +21,7 @@ import {
 } from "lucide-react";
 import { useWatchlist } from "../context/WatchlistContext";
 import { StockLogo } from "../components/StockLogo";
-import { formatMarketCap as formatLargeNumber } from "../utils/format";
-
-const formatPrice = (val) => {
-  if (val == null || !Number.isFinite(val)) return "N/A";
-  return `$${val.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-};
+import { formatPrice, formatMarketCap, getUSDEquivalent } from "../utils/format";
 
 const formatVolume = (val) => {
   if (val == null || !Number.isFinite(val)) return "N/A";
@@ -41,17 +33,6 @@ const formatVolume = (val) => {
   return val.toLocaleString();
 };
 
-const formatCurrency = (val) => {
-  if (val == null || !Number.isFinite(val)) return "N/A";
-  if (val < 0) return "N/A";
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-  return `$${val.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-};
 
 const formatTimestamp = (ts) => {
   if (!ts) return "N/A";
@@ -76,7 +57,7 @@ const scoreValuation = (s) => {
 };
 
 const scoreProfitability = (s) => {
-  const eps = s.eps;
+  const eps = getUSDEquivalent(s.eps, s.currency, s.ticker);
   if (eps == null) return 40;
   if (eps > 5) return 90;
   if (eps > 2) return 70;
@@ -103,7 +84,7 @@ const scoreIncome = (s) => {
 };
 
 const scoreScale = (s) => {
-  const mc = s.market_cap;
+  const mc = getUSDEquivalent(s.market_cap, s.currency, s.ticker);
   if (mc == null) return 30;
   if (mc > 100e9) return 90;
   if (mc > 10e9) return 70;
@@ -226,14 +207,33 @@ export const Watchlist = () => {
       changes.length > 0
         ? changes.reduce((a, b) => a + b, 0) / changes.length
         : null;
-    const totalMarketCap = watchlist.reduce(
-      (sum, item) => sum + (item.market_cap || 0),
-      0
-    );
-    const portfolioValue = watchlist.reduce(
-      (sum, item) => sum + (item.current_price || 0),
-      0
-    );
+
+    // Group portfolio value and market cap by currency
+    const portfolioTotals = {};
+    const marketCapTotals = {};
+    watchlist.forEach((item) => {
+      const code = item.currency || (item.ticker.endsWith(".NS") || item.ticker.endsWith(".BO") ? "INR" : "USD");
+      portfolioTotals[code] = (portfolioTotals[code] || 0) + (item.current_price || 0);
+      marketCapTotals[code] = (marketCapTotals[code] || 0) + (item.market_cap || 0);
+    });
+
+    const formatGrouped = (totals, isMarketCap = false) => {
+      const entries = Object.entries(totals);
+      if (entries.length === 0) return "N/A";
+      return entries
+        .map(([code, value]) => {
+          if (isMarketCap) {
+            return formatMarketCap(value, code);
+          } else {
+            return formatPrice(value, code);
+          }
+        })
+        .join(" + ");
+    };
+
+    const portfolioValueStr = formatGrouped(portfolioTotals, false);
+    const totalMarketCapStr = formatGrouped(marketCapTotals, true);
+
     const lastUpdated = watchlist.reduce((latest, item) => {
       const ts = item.updated_at || item.added_at;
       return ts && (!latest || new Date(ts) > new Date(latest)) ? ts : latest;
@@ -260,13 +260,14 @@ export const Watchlist = () => {
       const sector = getSector(item);
       if (!sectorMap[sector]) sectorMap[sector] = { sector, count: 0, marketCap: 0 };
       sectorMap[sector].count++;
-      sectorMap[sector].marketCap += item.market_cap || 0;
+      sectorMap[sector].marketCap += getUSDEquivalent(item.market_cap, item.currency, item.ticker) || 0;
     });
     const sectorData = Object.values(sectorMap).sort((a, b) => b.count - a.count);
 
     if (watchlist.length === 0) {
       return {
-        changes, avgChange, totalMarketCap, portfolioValue, lastUpdated,
+        changes, avgChange, totalMarketCap: 0, portfolioValue: 0,
+        totalMarketCapStr: "N/A", portfolioValueStr: "N/A", lastUpdated,
         topGainer, topLoser, sectorData,
         grade: "N/A",
         avgScore: 0,
@@ -306,7 +307,7 @@ export const Watchlist = () => {
     watchlist.forEach((item) => {
       const sector = getSector(item);
       if (sector === "Unclassified") return;
-      const mc = item.market_cap || 0;
+      const mc = getUSDEquivalent(item.market_cap, item.currency, item.ticker) || 0;
       if (mc <= 0) return;
       classifiedCaps[sector] = (classifiedCaps[sector] || 0) + mc;
     });
@@ -390,9 +391,9 @@ export const Watchlist = () => {
     const sectorCaps = {};
     watchlist.forEach((i) => {
       const sector = getSector(i);
-      sectorCaps[sector] = (sectorCaps[sector] || 0) + (i.market_cap || 0);
+      sectorCaps[sector] = (sectorCaps[sector] || 0) + (getUSDEquivalent(i.market_cap, i.currency, i.ticker) || 0);
     });
-    const totalCap = watchlist.reduce((s, i) => s + (i.market_cap || 0), 0);
+    const totalCap = watchlist.reduce((s, i) => s + (getUSDEquivalent(i.market_cap, i.currency, i.ticker) || 0), 0);
     let largestSector = null;
     let largestSectorPct = 0;
     for (const [sector, cap] of Object.entries(sectorCaps)) {
@@ -424,7 +425,8 @@ export const Watchlist = () => {
     }
 
     return {
-      changes, avgChange, totalMarketCap, portfolioValue, lastUpdated,
+      changes, avgChange, totalMarketCap: totalCap, portfolioValue: 0,
+      totalMarketCapStr, portfolioValueStr, lastUpdated,
       topGainer, topLoser, sectorData,
       grade,
       avgScore: Math.round(avgScore),
@@ -597,7 +599,7 @@ export const Watchlist = () => {
               Market Cap
             </div>
             <p className="text-lg font-black text-white tabular-nums">
-              {analytics.totalMarketCap > 0 ? formatLargeNumber(analytics.totalMarketCap) : "N/A"}
+              {analytics.totalMarketCapStr}
             </p>
           </div>
           <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
@@ -606,7 +608,7 @@ export const Watchlist = () => {
               Portfolio Value
             </div>
             <p className="text-lg font-black text-white tabular-nums">
-              {analytics.portfolioValue > 0 ? formatCurrency(analytics.portfolioValue) : "N/A"}
+              {analytics.portfolioValueStr}
             </p>
           </div>
           <div className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4 glass-card-no-hover">
@@ -1005,7 +1007,7 @@ export const Watchlist = () => {
                             {item.ticker}
                           </span>
                           <span className="ml-1 text-[8px] sm:text-[9px] text-gray-500 font-bold bg-[#0B0F19] border border-[#242D3D] px-1 rounded uppercase">
-                            US
+                            {item.ticker.endsWith(".NS") || item.ticker.endsWith(".BO") ? "IN" : "US"}
                           </span>
                         </div>
                       </div>
@@ -1020,7 +1022,7 @@ export const Watchlist = () => {
 
                     {/* Price */}
                     <td className="px-2 sm:px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-xs sm:text-sm font-semibold text-white">
-                      {formatPrice(item.current_price)}
+                      {formatPrice(item.current_price, item.currency, item.ticker)}
                     </td>
 
                     {/* Daily Change */}
@@ -1048,7 +1050,7 @@ export const Watchlist = () => {
 
                     {/* Market Cap */}
                     <td className="px-2 sm:px-4 py-3.5 text-right whitespace-nowrap tabular-nums text-xs sm:text-sm font-medium text-gray-300 hidden md:table-cell">
-                      {formatLargeNumber(item.market_cap)}
+                      {formatMarketCap(item.market_cap, item.currency, item.ticker)}
                     </td>
 
                     {/* Volume */}

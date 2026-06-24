@@ -25,6 +25,7 @@ class WatchlistResponse(WatchlistBase):
     current_price: Optional[float] = None
     previous_close: Optional[float] = None
     volume: Optional[int] = None
+    currency: Optional[str] = "USD"
     price_change_percent: Optional[float] = None
     website: Optional[str] = None
     updated_at: Optional[datetime] = None

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Search, ChevronDown, ChevronUp, Trash2, Save, Download, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { api } from "../services/api";
-import { formatMarketCap } from "../utils/format";
+import { formatMarketCap, formatPrice, getUSDEquivalent } from "../utils/format";
 
 const TICKERS = [
   "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX",
@@ -12,6 +12,8 @@ const TICKERS = [
   "BA", "CAT", "GE", "IBM", "GS", "MS", "C", "SCHW",
   "CVX", "XOM", "COP", "DUK", "SO", "NEE", "T", "VZ",
   "AMAT", "KLAC", "MU", "TXN", "PANW", "CRWD", "WDAY", "NOW",
+  "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+  "HINDUNILVR.NS", "BHARTIARTL.NS", "ITC.NS", "SBIN.NS"
 ];
 
 const MARKET_CAP_OPTIONS = [
@@ -49,9 +51,10 @@ const getDailyChange = (s) => {
 const computeScore = (s, avgVolume) => {
   let score = 50;
 
-  if (s.market_cap != null) {
-    if (s.market_cap > 100e9) score += 10;
-    else if (s.market_cap > 10e9) score += 5;
+  const usdMc = getUSDEquivalent(s.market_cap, s.currency, s.ticker);
+  if (usdMc != null) {
+    if (usdMc > 100e9) score += 10;
+    else if (usdMc > 10e9) score += 5;
   }
 
   if (s.pe_ratio != null) {
@@ -100,7 +103,8 @@ const getRating = (score) => {
 const getPickReason = (s) => {
   if (s._score >= 85) return "Strong profitability";
   if (s._score >= 75) {
-    if (s.market_cap != null && s.market_cap > 100e9) return "Large cap leader";
+    const usdMc = getUSDEquivalent(s.market_cap, s.currency, s.ticker);
+    if (usdMc != null && usdMc > 100e9) return "Large cap leader";
     if (s.pe_ratio != null && s.pe_ratio >= 10 && s.pe_ratio <= 20) return "Attractive valuation";
     const d = getDailyChange(s);
     if (d != null && d > 2) return "Strong momentum";
@@ -109,7 +113,8 @@ const getPickReason = (s) => {
   if (s._score >= 65) {
     if (s.dividend_yield != null && s.dividend_yield > 0.02) return "High dividend profile";
     if (s.beta != null && s.beta >= 0.8 && s.beta <= 1.5) return "Balanced fundamentals";
-    if (s.market_cap != null && s.market_cap > 50e9) return "Large cap leader";
+    const usdMc = getUSDEquivalent(s.market_cap, s.currency, s.ticker);
+    if (usdMc != null && usdMc > 50e9) return "Large cap leader";
     return "Attractive valuation";
   }
   if (s.pe_ratio != null && s.pe_ratio <= 15) return "Attractive valuation";
@@ -693,7 +698,7 @@ export const Screener = () => {
                       <span className="text-[9px] text-gray-500 truncate max-w-[110px]">{s.sector || "—"}</span>
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-semibold text-gray-300 tabular-nums">
-                          {s.current_price != null && Number.isFinite(s.current_price) ? `$${s.current_price.toFixed(2)}` : "—"}
+                          {formatPrice(s.current_price, s.currency, s.ticker)}
                         </span>
                         {(() => {
                           const d = getDailyChange(s);
@@ -863,7 +868,7 @@ export const Screener = () => {
                           <td className="px-3 py-3 font-bold text-gray-200">{s.ticker}</td>
                           <td className="px-3 py-3 text-gray-400 max-w-[160px] truncate">{s.name}</td>
                           <td className="px-3 py-3 text-right font-semibold text-gray-200 tabular-nums">
-                          {s.current_price != null && Number.isFinite(s.current_price) ? `$${s.current_price.toFixed(2)}` : "—"}
+                            {formatPrice(s.current_price, s.currency, s.ticker)}
                           </td>
                           <td className={`px-3 py-3 text-right font-semibold tabular-nums ${
                             dailyPct != null
@@ -872,7 +877,7 @@ export const Screener = () => {
                           }`}>
                             {dailyPct != null && Number.isFinite(dailyPct) ? `${dailyPct >= 0 ? "+" : ""}${dailyPct.toFixed(2)}%` : "—"}
                           </td>
-                          <td className="px-3 py-3 text-right text-gray-300 tabular-nums">{formatMarketCap(s.market_cap)}</td>
+                          <td className="px-3 py-3 text-right text-gray-300 tabular-nums">{formatMarketCap(s.market_cap, s.currency, s.ticker)}</td>
                           <td className="px-3 py-3 text-right text-gray-300 tabular-nums">{s.pe_ratio != null && Number.isFinite(s.pe_ratio) ? s.pe_ratio.toFixed(2) : "—"}</td>
                           <td className="px-3 py-3 text-gray-400 max-w-[120px] truncate">{s.sector || "—"}</td>
                         </tr>

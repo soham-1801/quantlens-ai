@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { formatPrice, getCurrencySymbol } from "../utils/format";
 
 const COLORS = ["#3B82F6", "#22D3EE"];
 const GRADIENTS = [
@@ -16,7 +17,7 @@ const GRADIENTS = [
   { id: "colorB", color: "#22D3EE" },
 ];
 
-export const StockChart = ({ history, period, onPeriodChange, comparison, tickers }) => {
+export const StockChart = ({ history, period, onPeriodChange, comparison, tickers, currency, ticker }) => {
   const periods = [
     { label: "1M", value: "1m" },
     { label: "6M", value: "6m" },
@@ -47,7 +48,7 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
             {entry.name}:{" "}
             {comparison
               ? `${entry.value >= 0 ? "+" : ""}${entry.value.toFixed(2)}%`
-              : `$${entry.value.toFixed(2)}`}
+              : formatPrice(entry.value, currency, ticker)}
           </p>
         ))}
       </div>
@@ -122,7 +123,7 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
         </div>
       </div>
 
-      <div className="w-full" style={{ height: "clamp(200px, 40vh, 400px)" }}>
+      <div className="w-full min-w-0 h-[280px] sm:h-[340px] lg:h-[420px]">
         {(() => {
           const cleanData = Array.isArray(history)
             ? history.filter(p => p && typeof p.close === 'number' && Number.isFinite(p.close) && p.close > 0)
@@ -136,7 +137,7 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
             ? [Math.max(0, minClose - pad), maxClose + pad]
             : [0, 100];
           return hasValidData ? (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={240}>
             <AreaChart data={cleanData} margin={{ top: 8, right: 4, left: -20, bottom: 2 }}>
               <defs>
                 <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
@@ -171,7 +172,7 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
                 tickLine={false}
                 axisLine={false}
                 domain={chartDomain}
-                tickFormatter={(v) => Number.isFinite(v) ? (comparison ? `${v.toFixed(1)}%` : `$${v.toFixed(0)}`) : ""}
+                tickFormatter={(v) => Number.isFinite(v) ? (comparison ? `${v.toFixed(1)}%` : `${getCurrencySymbol(currency, ticker)}${v.toFixed(0)}`) : ""}
                 width={46}
               />
               <Tooltip content={<CustomTooltip />} cursor={<CustomCursor />} />

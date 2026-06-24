@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useWatchlist } from "../context/WatchlistContext";
 import { Search, Star, Trash2, ArrowUpRight, ArrowDownRight, TrendingUp, RefreshCcw, ArrowRight, TrendingDown, Compass } from "lucide-react";
 import { StockLogo } from "../components/StockLogo";
+import { formatPrice } from "../utils/format";
 
 const WatchlistSkeleton = () => (
   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-5">
@@ -216,8 +217,8 @@ export const Dashboard = () => {
                           <h4 className="text-sm font-black text-white group-hover:text-blue-400 transition-colors truncate">
                             {item.ticker}
                           </h4>
-                          <span className="text-[8px] text-gray-500 font-bold bg-[#0B0F19] border border-[#242D3D] px-1 py-0.5 rounded uppercase shrink-0">
-                            US
+                           <span className="text-[8px] text-gray-500 font-bold bg-[#0B0F19] border border-[#242D3D] px-1 py-0.5 rounded uppercase shrink-0">
+                            {item.ticker.endsWith(".NS") || item.ticker.endsWith(".BO") ? "IN" : "US"}
                           </span>
                         </div>
                         <p className="text-xs text-gray-400 font-light truncate mt-0.5" title={item.company_name || ""}>
@@ -249,9 +250,7 @@ export const Dashboard = () => {
                     <div>
                       <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</p>
                       <p className="text-base font-black text-white mt-0.5 tabular-nums">
-                        {item.current_price != null && Number.isFinite(item.current_price)
-                          ? `$${item.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : "—"}
+                        {formatPrice(item.current_price, item.currency, item.ticker)}
                       </p>
                     </div>
                     <div className="text-right">

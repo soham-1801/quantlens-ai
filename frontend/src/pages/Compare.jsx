@@ -3,12 +3,7 @@ import { Loader2, TrendingUp, TrendingDown, GitCompare, ArrowLeftRight } from "l
 import { api } from "../services/api";
 import { StockLogo } from "../components/StockLogo";
 import { useWatchlist } from "../context/WatchlistContext";
-import { formatMarketCap } from "../utils/format";
-
-const formatPrice = (val) => {
-  if (val == null || !Number.isFinite(val)) return "N/A";
-  return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
+import { formatMarketCap, formatPrice, getCurrencySymbol } from "../utils/format";
 
 const ChangePill = ({ value }) => {
   if (value == null) return <span className="text-gray-500 text-xs font-medium">N/A</span>;
@@ -128,20 +123,22 @@ export const Compare = () => {
     return ((overviewB.current_price - overviewB.previous_close) / overviewB.previous_close) * 100;
   }, [overviewB]);
 
-  const metricValue = (overview, change, key) => {
+  const metricValue = (overview, change, key, ticker) => {
     switch (key) {
-      case "company": return overview?.name || stockA || "N/A";
-      case "price": return formatPrice(overview?.current_price);
+      case "company": return overview?.name || ticker || "N/A";
+      case "price": return formatPrice(overview?.current_price, overview?.currency, ticker);
       case "change": return change;
-      case "marketCap": return formatMarketCap(overview?.market_cap);
+      case "marketCap": return formatMarketCap(overview?.market_cap, overview?.currency, ticker);
       case "pe": return overview?.pe_ratio != null && Number.isFinite(overview.pe_ratio) ? overview.pe_ratio.toFixed(2) : "N/A";
-      case "eps": return overview?.eps != null && Number.isFinite(overview.eps) ? overview.eps.toFixed(2) : "N/A";
+      case "eps": return overview?.eps != null && Number.isFinite(overview.eps) ? formatPrice(overview.eps, overview?.currency, ticker) : "N/A";
       case "divYield": return overview?.dividend_yield != null && Number.isFinite(overview.dividend_yield) ? `${(overview.dividend_yield * 100).toFixed(2)}%` : "N/A";
       case "volume": return overview?.volume != null && Number.isFinite(overview.volume) ? overview.volume.toLocaleString() : "N/A";
       case "range": {
         const hi = overview?.fifty_two_week_high;
         const lo = overview?.fifty_two_week_low;
-        return hi != null && lo != null ? `${formatPrice(lo)} – ${formatPrice(hi)}` : "N/A";
+        return hi != null && lo != null
+          ? `${getCurrencySymbol(overview?.currency, ticker)}${lo.toFixed(0)} – ${getCurrencySymbol(overview?.currency, ticker)}${hi.toFixed(0)}`
+          : "N/A";
       }
       default: return "N/A";
     }
@@ -249,8 +246,8 @@ export const Compare = () => {
                 </thead>
                 <tbody>
                   {METRICS.map((m) => {
-                    const a = metricValue(overviewA, changeA, m.key);
-                    const b = metricValue(overviewB, changeB, m.key);
+                    const a = metricValue(overviewA, changeA, m.key, stockA);
+                    const b = metricValue(overviewB, changeB, m.key, stockB);
                     if (m.pill) {
                       return (
                         <tr key={m.key} className="border-b border-[#242D3D]/20">
@@ -270,8 +267,8 @@ export const Compare = () => {
           {/* Mobile Stacked Cards */}
           <div className="md:hidden space-y-4">
             {METRICS.map((m) => {
-              const a = metricValue(overviewA, changeA, m.key);
-              const b = metricValue(overviewB, changeB, m.key);
+              const a = metricValue(overviewA, changeA, m.key, stockA);
+              const b = metricValue(overviewB, changeB, m.key, stockB);
               return (
                 <div key={m.key} className="glass-card rounded-xl sm:rounded-2xl p-3 sm:p-4">
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-3">{m.label}</p>

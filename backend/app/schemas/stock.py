@@ -21,6 +21,7 @@ class StockOverview(BaseModel):
     market_cap: Optional[int] = None
     pe_ratio: Optional[float] = None
     dividend_yield: Optional[float] = None
+    currency: Optional[str] = None
     current_price: Optional[float] = None
     day_high: Optional[float] = None
     day_low: Optional[float] = None

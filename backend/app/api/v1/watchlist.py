@@ -72,6 +72,7 @@ def get_watchlist(
             current_price=item.current_price,
             previous_close=item.previous_close,
             volume=volume,
+            currency=item.currency or "USD",
             price_change_percent=price_change_percent,
             website=item.website,
             updated_at=item.updated_at,
@@ -131,6 +132,7 @@ def get_watchlist_item(
         current_price=item.current_price,
         previous_close=item.previous_close,
         volume=volume,
+        currency=item.currency or "USD",
         price_change_percent=price_change_percent,
         website=item.website,
         updated_at=item.updated_at,
@@ -168,7 +170,6 @@ def add_to_watchlist(
         
     _vol_logger.info("WATCHLIST_ADD [%s] overview.volume=%s", ticker_upper, overview.volume)
 
-    # 3. Create entry with persisted overview fields
     new_item = Watchlist(
         user_id=current_user.id,
         ticker=ticker_upper,
@@ -183,6 +184,7 @@ def add_to_watchlist(
         current_price=overview.current_price,
         previous_close=overview.previous_close,
         volume=overview.volume,
+        currency=overview.currency or "USD",
         website=overview.website,
         updated_at=func.now()
     )
@@ -264,6 +266,7 @@ def refresh_watchlist_item(
         item.current_price = overview.current_price
         item.previous_close = overview.previous_close
         item.volume = overview.volume
+        item.currency = overview.currency or "USD"
         item.website = overview.website
     
     item.updated_at = func.now()

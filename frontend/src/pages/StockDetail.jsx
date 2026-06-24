@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, ExternalLink, Newspaper, Lightbulb, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, ExternalLink, Newspaper, Lightbulb, ArrowUp, ArrowDown, ArrowLeftRight } from "lucide-react";
 import { StockChart } from "../components/StockChart";
 import { StockOverview } from "../components/StockOverview";
 import { SentimentCards } from "../components/SentimentCards";
 import { api } from "../services/api";
 import { StockLogo } from "../components/StockLogo";
 import { computePerformanceReturns, formatReturn } from "../utils/performance";
-import { formatMarketCap } from "../utils/format";
+import { formatMarketCap, formatPrice, getCurrencySymbol } from "../utils/format";
 import { useWatchlist } from "../context/WatchlistContext";
 import { useAuth } from "../context/AuthContext";
 
@@ -46,6 +46,8 @@ export const StockDetail = ({ ticker }) => {
   const [researchLoading, setResearchLoading] = useState(true);
   const [earnings, setEarnings] = useState(null);
   const [earningsLoading, setEarningsLoading] = useState(true);
+  const [recommendation, setRecommendation] = useState(null);
+  const [recommendationLoading, setRecommendationLoading] = useState(true);
 
   const { watchlist, addToWatchlist, removeFromWatchlist } = useWatchlist();
   const isWatchlisted = useMemo(() => {
@@ -101,8 +103,7 @@ export const StockDetail = ({ ticker }) => {
 
   const NAV_TABS = [
     { id: "section-overview", label: "Overview" },
-    { id: "section-news", label: "News" },
-    { id: "section-sentiment", label: "Sentiment" },
+    { id: "section-news", label: "Sentiment & News" },
     { id: "section-ai-research", label: "AI Research" },
     { id: "section-earnings", label: "Earnings" },
   ];
@@ -113,8 +114,9 @@ export const StockDetail = ({ ticker }) => {
     setNewsLoading(true);
     setResearchLoading(true);
     setEarningsLoading(true);
+    setRecommendationLoading(true);
     try {
-      const [overviewData, historyData, perfHistoryData, sentimentData, newsData, researchData, earningsData] = await Promise.all([
+      const [overviewData, historyData, perfHistoryData, sentimentData, newsData, researchData, earningsData, recommendationData] = await Promise.all([
         api.get(`/stocks/${ticker}/overview`, { signal }),
         api.get(`/stocks/${ticker}/history?period=${period}`, { signal }),
         api.get(`/stocks/${ticker}/history?period=1y`, { signal }),
@@ -122,6 +124,7 @@ export const StockDetail = ({ ticker }) => {
         api.get(`/stocks/${ticker}/news`, { signal }),
         api.get(`/insights/${ticker}/research`, { signal }),
         api.get(`/insights/${ticker}/earnings`, { signal }),
+        api.get(`/insights/${ticker}/recommendation`, { signal }),
       ]);
       setOverview(overviewData);
       setHistory(historyData);
@@ -130,6 +133,7 @@ export const StockDetail = ({ ticker }) => {
       setNews(Array.isArray(newsData) ? newsData : []);
       setResearch(researchData);
       setEarnings(earningsData);
+      setRecommendation(recommendationData);
     } catch (err) {
       if (err.name !== "AbortError") {
         setError(err.message || "Failed to load stock data. Please verify ticker symbol.");
@@ -139,6 +143,7 @@ export const StockDetail = ({ ticker }) => {
       setNewsLoading(false);
       setResearchLoading(false);
       setEarningsLoading(false);
+      setRecommendationLoading(false);
     }
   };
 
@@ -231,9 +236,9 @@ export const StockDetail = ({ ticker }) => {
   const showNav = overview && !loading;
 
   return (
-    <div className="space-y-6 max-w-full animate-fade-in">
+    <div className="space-y-6 w-full max-w-none px-4 lg:px-6 animate-fade-in">
       {/* Header */}
-      <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3" id="section-overview">
+      <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3" id="section-overview">
         <div className="flex items-start gap-3 min-w-0">
           <button
             onClick={goBack}
@@ -259,30 +264,6 @@ export const StockDetail = ({ ticker }) => {
             </div>
           )}
         </div>
-
-        <button
-          onClick={toggleWatchlist}
-          disabled={watchlistLoading}
-          className={`flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2 rounded-xl active:scale-[0.98] transition-all border w-full lg:w-auto shrink-0 ${
-            isWatchlisted
-              ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/25"
-              : "bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-lg shadow-blue-600/15"
-          }`}
-        >
-          {watchlistLoading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : isWatchlisted ? (
-            <>
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Remove</span>
-            </>
-          ) : (
-            <>
-              <Plus className="w-3.5 h-3.5" />
-              <span>Watchlist</span>
-            </>
-          )}
-        </button>
       </div>
 
       {/* Section Navigation */}
@@ -309,7 +290,7 @@ export const StockDetail = ({ ticker }) => {
             <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover">
               <span className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</span>
               <p className="text-xs sm:text-sm md:text-base font-black text-white mt-0.5 tabular-nums">
-                {overview.current_price != null && Number.isFinite(overview.current_price) ? `$${overview.current_price.toFixed(2)}` : "N/A"}
+                {formatPrice(overview.current_price, overview.currency, ticker)}
               </p>
             </div>
 
@@ -331,7 +312,7 @@ export const StockDetail = ({ ticker }) => {
             <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover">
               <span className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-wider">Mkt Cap</span>
               <p className="text-xs sm:text-sm md:text-base font-black text-white mt-0.5 tabular-nums truncate">
-                {formatMarketCap(overview.market_cap)}
+                {formatMarketCap(overview.market_cap, overview.currency, ticker)}
               </p>
             </div>
 
@@ -392,171 +373,31 @@ export const StockDetail = ({ ticker }) => {
         </>
       )}
 
-      {/* Main workspace: chart + news (left) | overview (right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-x-4 items-start">
-        {/* Left column: chart (with optional no-news strip inside) + full sentiment when news exists */}
-        <div className="lg:col-span-2 min-w-0 flex flex-col gap-3 md:gap-4 order-1">
+      {/* Main workspace: balanced 2-column structure on desktop */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start w-full min-w-0">
+        
+        {/* Left/main column: chart, news/sentiment, research, earnings */}
+        <div className="min-w-0 flex flex-col gap-4 order-2 xl:order-1">
           <StockChart
             history={history}
             period={period}
             onPeriodChange={setPeriod}
+            currency={overview?.currency}
+            ticker={ticker}
           />
-          {hasSentimentData && <SentimentCards sentiment={sentiment} />}
 
-          {/* Bottom grid: News + Sentiment Overview */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 mt-4 scroll-mt-20" id="section-news">
-            {/* News Section */}
-            <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden" id="section-news-card">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
-                <Newspaper className="w-4 h-4 text-blue-400" />
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">News</h3>
+          <div id="section-news" className="scroll-mt-20">
+            {hasSentimentData ? (
+              <SentimentCards sentiment={sentiment} />
+            ) : (
+              <div className="glass-card rounded-2xl p-6 text-center text-gray-500">
+                Sentiment & news analysis currently unavailable.
               </div>
-              <div className="divide-y divide-[#242D3D]/30">
-                {newsLoading ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="px-5 py-3.5 space-y-2">
-                      <div className="h-3.5 bg-[#242D3D]/40 rounded animate-pulse w-3/4" />
-                      <div className="h-3 bg-[#242D3D]/30 rounded animate-pulse w-1/2" />
-                    </div>
-                  ))
-                ) : news.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 px-5 text-center">
-                    <div className="w-12 h-12 rounded-xl bg-[#242D3D]/30 border border-[#242D3D]/60 flex items-center justify-center mb-3">
-                      <Newspaper className="w-5 h-5 text-gray-500" />
-                    </div>
-                    <p className="text-xs text-gray-400 font-semibold mb-1">No recent news coverage</p>
-                    <p className="text-[10px] text-gray-500 leading-relaxed max-w-[220px]">
-                      We are monitoring this stock for new articles.
-                    </p>
-                    <p className="text-[9px] text-gray-600 mt-3">
-                      Last checked: {new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                ) : (
-                  news.slice(0, 10).map((article, idx) => (
-                    <a
-                      key={idx}
-                      href={article.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block px-5 py-3.5 hover:bg-blue-500/5 transition-colors group"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-gray-200 group-hover:text-blue-400 transition-colors leading-relaxed line-clamp-2">
-                            {article.title}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[10px] text-gray-500 font-medium">{article.publisher}</span>
-                            <span className="text-[8px] text-gray-600">•</span>
-                            <span className="text-[10px] text-gray-500 tabular-nums">
-                              {article.published_at
-                                ? new Date(article.published_at * 1000).toLocaleDateString(undefined, {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  })
-                                : ""}
-                            </span>
-                          </div>
-                        </div>
-                        <ExternalLink className="w-3.5 h-3.5 text-gray-600 group-hover:text-blue-400 shrink-0 mt-0.5 transition-colors" />
-                      </div>
-                    </a>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Sentiment Overview Card */}
-            <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden" id="section-sentiment">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 via-gray-400 to-red-400" />
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Sentiment Overview</h3>
-              </div>
-              <div className="p-5">
-                {sentiment === null && !hasSentimentData ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="space-y-1.5">
-                        <div className="h-3 bg-[#242D3D]/40 rounded animate-pulse w-1/3" />
-                        <div className="h-2.5 bg-[#242D3D]/30 rounded animate-pulse w-full" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {(() => {
-                      const hasData = sentimentCategories !== null;
-                      const cats = hasData
-                        ? sentimentCategories
-                        : {
-                            data: [
-                              { label: "Bullish", pct: 0, color: "bg-emerald-500" },
-                              { label: "Neutral", pct: 0, color: "bg-gray-500" },
-                              { label: "Bearish", pct: 0, color: "bg-red-500" },
-                            ],
-                            overall: "Neutral",
-                          };
-                      return (
-                        <>
-                          {/* Overall badge */}
-                          <div className="flex items-center justify-center">
-                            <span
-                              className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider px-3 py-1.5 rounded-lg border ${
-                                cats.overall === "Bullish"
-                                  ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                                  : cats.overall === "Bearish"
-                                    ? "text-red-400 bg-red-500/10 border-red-500/20"
-                                    : "text-gray-400 bg-gray-500/10 border-gray-500/20"
-                              }`}
-                            >
-                              <span
-                                className={`w-2 h-2 rounded-full ${
-                                  cats.overall === "Bullish"
-                                    ? "bg-emerald-500"
-                                    : cats.overall === "Bearish"
-                                      ? "bg-red-500"
-                                      : "bg-gray-400"
-                                }`}
-                              />
-                              {cats.overall}
-                            </span>
-                          </div>
-
-                          {/* Category bars */}
-                          {cats.data.map((cat) => (
-                            <div key={cat.label}>
-                              <div className="flex items-center justify-between text-xs mb-1">
-                                <span className="text-gray-300 font-medium">{cat.label}</span>
-                                <span className="text-gray-400 tabular-nums font-semibold">{cat.pct}%</span>
-                              </div>
-                              <div className="w-full h-2 bg-[#242D3D]/60 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${cat.color}`}
-                                  style={{ width: `${cat.pct}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-
-                          {/* No-data message */}
-                          {!hasData && (
-                            <p className="text-[10px] text-gray-500 font-medium text-center pt-1">
-                              No recent news coverage available.
-                            </p>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
           </div>
 
           {/* AI Research Summary */}
-          <div className="glass-card rounded-xl sm:rounded-2xl mt-6 scroll-mt-20 overflow-hidden" id="section-ai-research">
+          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden" id="section-ai-research">
             <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
               <Lightbulb className="w-4 h-4 text-amber-400" />
               <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">AI Research Summary</h3>
@@ -576,7 +417,7 @@ export const StockDetail = ({ ticker }) => {
                 <p className="text-xs text-gray-500 font-medium text-center py-6">AI research summary unavailable.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
                     <div>
                       <h4 className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-2">Bull Case</h4>
                       <ul className="space-y-1">
@@ -646,10 +487,12 @@ export const StockDetail = ({ ticker }) => {
           </div>
 
           {/* Earnings Intelligence */}
-          <div className="glass-card rounded-xl sm:rounded-2xl mt-6 scroll-mt-20 overflow-hidden" id="section-earnings">
+          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden" id="section-earnings">
             <div className="flex items-center justify-between px-5 py-3 border-b border-[#242D3D]/40">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded flex items-center justify-center text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">$</div>
+                <div className="w-4 h-4 rounded flex items-center justify-center text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+                  {getCurrencySymbol(overview?.currency, ticker)}
+                </div>
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Earnings Intelligence</h3>
               </div>
               {(() => {
@@ -684,7 +527,9 @@ export const StockDetail = ({ ticker }) => {
               ) : !earnings ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="w-10 h-10 rounded-xl bg-[#242D3D]/30 border border-[#242D3D]/60 flex items-center justify-center mb-3">
-                    <span className="text-sm font-black text-gray-500">$</span>
+                    <span className="text-sm font-black text-gray-500">
+                      {getCurrencySymbol(overview?.currency, ticker)}
+                    </span>
                   </div>
                   <p className="text-xs text-gray-500 font-medium">Earnings intelligence unavailable.</p>
                 </div>
@@ -716,18 +561,22 @@ export const StockDetail = ({ ticker }) => {
                     {
                       label: "Revenue Estimate",
                       value: earnings.revenue_estimate != null && Number.isFinite(earnings.revenue_estimate)
-                        ? `$${(earnings.revenue_estimate / 1e9).toFixed(2)}B`
+                        ? formatMarketCap(earnings.revenue_estimate, overview?.currency, ticker)
                         : "N/A",
                       sub: null,
                     },
                     {
                       label: "EPS Estimate",
-                      value: earnings.eps_estimate != null && Number.isFinite(earnings.eps_estimate) ? `$${earnings.eps_estimate.toFixed(2)}` : "N/A",
+                      value: earnings.eps_estimate != null && Number.isFinite(earnings.eps_estimate)
+                        ? formatPrice(earnings.eps_estimate, overview?.currency, ticker)
+                        : "N/A",
                       sub: null,
                     },
                     {
                       label: "Previous EPS",
-                      value: earnings.previous_eps != null && Number.isFinite(earnings.previous_eps) ? `$${earnings.previous_eps.toFixed(2)}` : "N/A",
+                      value: earnings.previous_eps != null && Number.isFinite(earnings.previous_eps)
+                        ? formatPrice(earnings.previous_eps, overview?.currency, ticker)
+                        : "N/A",
                       sub: null,
                     },
                     {
@@ -780,10 +629,176 @@ export const StockDetail = ({ ticker }) => {
           </div>
         </div>
 
-        {/* Right column: overview sidebar — sticky to chart top, natural height */}
-        <div className="lg:col-span-1 min-w-0 order-first lg:order-2 lg:sticky lg:top-0 z-10 mb-3 lg:mb-0">
+        {/* Right column: overview + compact extra cards — sticky on desktop */}
+        <div className="space-y-3 xl:sticky xl:top-24 self-start w-full md:w-[340px] xl:w-auto min-w-0 order-1 xl:order-2 mb-3 xl:mb-0">
           <StockOverview overview={overview} />
+          
+          {/* Action Buttons */}
+          <div className="glass-card rounded-2xl p-4 flex flex-col gap-2">
+            <button
+              onClick={toggleWatchlist}
+              disabled={watchlistLoading}
+              className={`flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border w-full cursor-pointer ${
+                isWatchlisted
+                  ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/25"
+                  : "bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-lg shadow-blue-600/15"
+              }`}
+            >
+              {watchlistLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : isWatchlisted ? (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove from Watchlist</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add to Watchlist</span>
+                </>
+              )}
+            </button>
+            <a
+              href={`#/compare`}
+              className="flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border border-[#242D3D]/60 bg-[#161B26]/30 text-gray-300 hover:bg-[#242D3D]/40 hover:text-white text-center w-full"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              <span>Compare Tickers</span>
+            </a>
+          </div>
+
+          {/* Quick Signals / Technical Snapshot */}
+          {recommendation && (
+            <div className="glass-card rounded-2xl p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-[#242D3D]/40 pb-2">
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Quick Signals</span>
+                <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">AI RECOMMENDATION</span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Signal</span>
+                  <div className="mt-0.5">
+                    {(() => {
+                      const sig = recommendation.signal || "HOLD";
+                      let color = "text-gray-400 bg-gray-500/10 border-gray-500/20";
+                      if (sig.includes("BUY")) {
+                        color = "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+                      } else if (sig.includes("SELL")) {
+                        color = "text-red-400 bg-red-500/10 border-red-500/20";
+                      }
+                      return (
+                        <span className={`text-xs font-black uppercase px-2 py-0.5 rounded-lg border ${color}`}>
+                          {sig}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+                
+                <div className="text-right">
+                  <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Conviction</span>
+                  <p className="text-sm font-black text-white mt-0.5 tabular-nums">
+                    {recommendation.score != null ? `${recommendation.score}/100` : "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {recommendation.reasons && recommendation.reasons.length > 0 && (
+                <div className="mt-1 space-y-1">
+                  <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">Key Catalysts</span>
+                  <ul className="space-y-0.5">
+                    {recommendation.reasons.slice(0, 3).map((reason, idx) => (
+                      <li key={idx} className="text-[10px] text-gray-400 leading-snug flex items-start gap-1">
+                        <span className="text-blue-400 font-bold shrink-0">•</span>
+                        <span className="line-clamp-2">{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Earnings mini-card */}
+          {earnings && (
+            <div className="glass-card rounded-2xl p-4 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between border-b border-[#242D3D]/40 pb-2">
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Earnings Schedule</span>
+                {(() => {
+                  const parsed = earnings.next_earnings_date ? new Date(earnings.next_earnings_date) : null;
+                  const daysUntil = parsed && !isNaN(parsed.getTime())
+                    ? Math.ceil((parsed - new Date()) / (1000 * 60 * 60 * 24))
+                    : null;
+                  const label = daysUntil !== null && daysUntil > 0 ? "Upcoming" : "Reported";
+                  const color = daysUntil !== null && daysUntil > 0
+                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : "text-gray-400 bg-gray-500/10 border-gray-500/20";
+                  return (
+                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${color}`}>
+                      {label}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">Report Date</span>
+                  <p className="text-white font-bold truncate mt-0.5">
+                    {earnings.next_earnings_date || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">EPS Est.</span>
+                  <p className="text-white font-bold mt-0.5 tabular-nums">
+                    {earnings.eps_estimate != null ? formatPrice(earnings.eps_estimate, overview?.currency, ticker) : "N/A"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Risk & Opportunity Card */}
+          {recommendation && (
+            <div className="glass-card rounded-2xl p-4 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between border-b border-[#242D3D]/40 pb-2">
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Risk Profile</span>
+                {(() => {
+                  const rl = recommendation.risk_level || "Medium";
+                  let color = "text-gray-400 bg-gray-500/10 border-gray-500/20";
+                  if (rl === "Low") color = "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+                  else if (rl === "High") color = "text-red-400 bg-red-500/10 border-red-500/20";
+                  return (
+                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${color}`}>
+                      {rl} Risk
+                    </span>
+                  );
+                })()}
+              </div>
+              
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[10px] text-gray-400">
+                  <span>Technical Score:</span>
+                  <span className="font-bold text-white tabular-nums">{recommendation.technical_score || 50}/100</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-400">
+                  <span>Sentiment Score:</span>
+                  <span className="font-bold text-white tabular-nums">{recommendation.sentiment_score || 50}/100</span>
+                </div>
+                {research && research.strengths && research.strengths.length > 0 && (
+                  <div className="mt-1 pt-1 border-t border-[#242D3D]/25">
+                    <span className="text-[8px] text-emerald-400 font-bold uppercase tracking-wider block">Key Catalyst</span>
+                    <p className="text-[10px] text-gray-300 leading-snug line-clamp-2 mt-0.5">
+                      {research.strengths[0]}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
       </div>
     </div>
   );

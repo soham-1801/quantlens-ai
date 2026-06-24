@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Globe } from "lucide-react";
 import { MetricTooltip } from "./MetricTooltip";
 import { StockLogo } from "./StockLogo";
+import { formatPrice, getCurrencySymbol } from "../utils/format";
 
 // 28 words ≈ 3 tight lines in the ~280px sidebar column
 const WORD_LIMIT = 28;
@@ -20,9 +21,9 @@ export const StockOverview = ({ overview }) => {
 
   const formatCompactNumber = (val) => {
     if (val == null || !Number.isFinite(val)) return "N/A";
-    if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-    if (val >= 1e9)  return `$${(val / 1e9).toFixed(2)}B`;
-    if (val >= 1e6)  return `$${(val / 1e6).toFixed(1)}M`;
+    if (val >= 1e12) return `${(val / 1e12).toFixed(2)}T`;
+    if (val >= 1e9)  return `${(val / 1e9).toFixed(2)}B`;
+    if (val >= 1e6)  return `${(val / 1e6).toFixed(1)}M`;
     if (val >= 1e3)  return `${(val / 1e3).toFixed(1)}K`;
     return val.toLocaleString();
   };
@@ -60,19 +61,19 @@ export const StockOverview = ({ overview }) => {
     },
     {
       label: "Open",
-      value: overview.open_price != null && Number.isFinite(overview.open_price) ? `$${overview.open_price.toFixed(2)}` : "N/A",
+      value: overview.open_price != null && Number.isFinite(overview.open_price) ? formatPrice(overview.open_price, overview.currency, overview.ticker) : "N/A",
       tooltip: "Opening trade price for the current session.",
     },
     {
       label: "Prev Close",
-      value: overview.previous_close != null && Number.isFinite(overview.previous_close) ? `$${overview.previous_close.toFixed(2)}` : "N/A",
+      value: overview.previous_close != null && Number.isFinite(overview.previous_close) ? formatPrice(overview.previous_close, overview.currency, overview.ticker) : "N/A",
       tooltip: "Official closing price from the previous trading session.",
     },
     {
       label: "52W Range",
       value:
         overview.fifty_two_week_low != null && Number.isFinite(overview.fifty_two_week_low) && overview.fifty_two_week_high != null && Number.isFinite(overview.fifty_two_week_high)
-          ? `$${overview.fifty_two_week_low.toFixed(0)}–$${overview.fifty_two_week_high.toFixed(0)}`
+          ? `${getCurrencySymbol(overview.currency, overview.ticker)}${overview.fifty_two_week_low.toFixed(0)}–${getCurrencySymbol(overview.currency, overview.ticker)}${overview.fifty_two_week_high.toFixed(0)}`
           : "N/A",
       tooltip: "Lowest and highest prices traded over the past 52 weeks.",
     },
@@ -246,7 +247,7 @@ export const StockOverview = ({ overview }) => {
                   Day Hi
                 </span>
                 <span className="text-[10px] text-white font-bold tabular-nums leading-none shrink-0">
-                  ${overview.day_high.toFixed(2)}
+                  {formatPrice(overview.day_high, overview.currency, overview.ticker)}
                 </span>
               </div>
             )}
@@ -258,7 +259,7 @@ export const StockOverview = ({ overview }) => {
                   Day Lo
                 </span>
                 <span className="text-[10px] text-white font-bold tabular-nums leading-none shrink-0">
-                  ${overview.day_low.toFixed(2)}
+                  {formatPrice(overview.day_low, overview.currency, overview.ticker)}
                 </span>
               </div>
             )}
