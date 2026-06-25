@@ -51,8 +51,8 @@ export const Layout = ({ children, onNavigate, currentPage }) => {
       {/* Sidebar — persistent on md+, drawer on mobile */}
       <aside
         className={`
-          fixed md:static inset-y-0 left-0 z-50
-          w-72 md:w-64
+          fixed md:sticky inset-y-0 md:top-0 left-0 z-50
+          w-72 md:w-64 md:h-screen
           bg-[#111622] border-r border-[#242D3D]
           flex flex-col shrink-0
           transition-transform duration-300 ease-in-out
@@ -149,7 +149,7 @@ export const Layout = ({ children, onNavigate, currentPage }) => {
       {/* Main area */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header bar */}
-        <header className="h-14 md:h-16 border-b border-[#242D3D] bg-[#111622]/80 backdrop-blur-md px-3 md:px-6 flex items-center justify-between relative z-30 gap-2">
+        <header className="sticky top-0 h-14 md:h-16 border-b border-[#242D3D] bg-[#111622]/80 backdrop-blur-md px-3 md:px-6 flex items-center justify-between z-30 gap-2">
           <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
             {/* Hamburger */}
             <button
