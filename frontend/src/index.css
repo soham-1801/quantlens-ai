@@ -33,7 +33,7 @@
 }
 
 html {
-  overflow-x: clip;
+  overflow-x: hidden;
   overflow-y: scroll;
   -webkit-text-size-adjust: 100%;
 }
@@ -46,7 +46,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   margin: 0;
   padding: 0;
-  overflow-x: clip;
+  overflow-x: hidden;
   width: 100%;
 }
 

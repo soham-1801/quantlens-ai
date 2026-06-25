@@ -51,7 +51,7 @@ export const Layout = ({ children, onNavigate, currentPage }) => {
       {/* Sidebar — persistent on md+, drawer on mobile */}
       <aside
         className={`
-          fixed md:sticky md:top-0 md:h-screen inset-y-0 left-0 z-50
+          fixed md:static inset-y-0 left-0 z-50
           w-72 md:w-64
           bg-[#111622] border-r border-[#242D3D]
           flex flex-col shrink-0
