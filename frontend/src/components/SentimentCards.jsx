@@ -1,17 +1,8 @@
-import React, { useState } from "react";
+import React from "react";
 import { MessageSquare, ExternalLink, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 export const SentimentCards = ({ sentiment }) => {
   if (!sentiment) return null;
-
-  const [expandedArticles, setExpandedArticles] = useState({});
-
-  const toggleArticleExpand = (idx) => {
-    setExpandedArticles((prev) => ({
-      ...prev,
-      [idx]: !prev[idx]
-    }));
-  };
 
   const gaugePosition = (score) => {
     return Number.isFinite(score) ? `${((score + 1) / 2) * 100}%` : "50%";
@@ -315,12 +306,9 @@ export const SentimentCards = ({ sentiment }) => {
           <div className="divide-y divide-[#242D3D]/40 text-[11px]">
             {sentiment.articles.map((article, idx) => {
               const articleConfig = getSentimentConfig(article.sentiment_score || 0.0);
-              const summaryText = article.summary || article.description;
-              const isExpanded = !!expandedArticles[idx];
-              
               return (
-                <div key={idx} className="py-1.5 flex items-start justify-between gap-4 group hover:bg-white/5 px-2 rounded-xl transition-colors">
-                  <div className="space-y-0.5 min-w-0 flex-1">
+                <div key={idx} className="py-2.5 flex items-start justify-between gap-4 group hover:bg-white/5 px-2 rounded-xl transition-colors">
+                  <div className="space-y-0.5 min-w-0">
                     <a
                       href={article.link}
                       target="_blank"
@@ -330,22 +318,7 @@ export const SentimentCards = ({ sentiment }) => {
                       <span className="line-clamp-2">{article.title}</span>
                       <ExternalLink className="w-2.5 h-2.5 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </a>
-                    
-                    {summaryText && (
-                      <div className="mt-1">
-                        <p className={`text-[10px] text-gray-400 leading-relaxed ${isExpanded ? "" : "line-clamp-2"}`}>
-                          {summaryText}
-                        </p>
-                        <button
-                          onClick={() => toggleArticleExpand(idx)}
-                          className="text-[9px] text-blue-400 font-bold hover:text-blue-300 mt-0.5 cursor-pointer block"
-                        >
-                          {isExpanded ? "Read Less" : "Read More"}
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9px] text-gray-500 font-medium pt-0.5">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9px] text-gray-500 font-medium">
                       <span>Publisher: <span className="text-gray-400 font-semibold">{article.publisher}</span></span>
                       <span>•</span>
                       <span>{formatTime(article.published_at)}</span>

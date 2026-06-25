@@ -236,9 +236,9 @@ export const StockDetail = ({ ticker }) => {
   const showNav = overview && !loading;
 
   return (
-    <div className="space-y-6 w-full max-w-none px-4 lg:px-6">
+    <div className="space-y-6 w-full max-w-none px-4 lg:px-6 animate-fade-in">
       {/* Header */}
-      <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3 animate-fade-in" id="section-overview">
+      <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3" id="section-overview">
         <div className="flex items-start gap-3 min-w-0">
           <button
             onClick={goBack}
@@ -248,37 +248,12 @@ export const StockDetail = ({ ticker }) => {
           </button>
 
           {overview && (
-            <div className="flex items-start gap-2.5 border-l border-[#242D3D] pl-3 min-w-0 flex-1">
+            <div className="flex items-start gap-2.5 border-l border-[#242D3D] pl-3 min-w-0">
               <StockLogo ticker={overview.ticker} website={overview.website} className="w-9 h-9 shrink-0" />
-              <div className="min-w-0 leading-tight flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-black text-white tracking-tight leading-none">
-                    {overview.ticker}
-                  </h1>
-                  <button
-                    onClick={toggleWatchlist}
-                    disabled={watchlistLoading}
-                    className={`flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border cursor-pointer shrink-0 w-fit ${
-                      isWatchlisted
-                        ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/25"
-                        : "bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-lg shadow-blue-600/15"
-                    }`}
-                  >
-                    {watchlistLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : isWatchlisted ? (
-                      <>
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Remove from Watchlist</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add to Watchlist</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+              <div className="min-w-0 leading-tight">
+                <h1 className="text-2xl font-black text-white tracking-tight leading-none">
+                  {overview.ticker}
+                </h1>
                 {overview.name && overview.name.toUpperCase() !== overview.ticker.toUpperCase() && (
                   <p className="text-xs text-gray-300 font-medium mt-0.5 line-clamp-2">{overview.name}</p>
                 )}
@@ -308,11 +283,9 @@ export const StockDetail = ({ ticker }) => {
         </div>
       )}
 
-      {/* Content area */}
-      <div className="space-y-6 animate-fade-in">
-        {overview && (
-          <>
-            {/* KPI strip */}
+      {overview && (
+        <>
+          {/* KPI strip */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
             <div className="glass-card rounded-xl p-2 md:p-3 glass-card-no-hover">
               <span className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</span>
@@ -662,6 +635,29 @@ export const StockDetail = ({ ticker }) => {
           
           {/* Action Buttons */}
           <div className="glass-card rounded-2xl p-4 flex flex-col gap-2">
+            <button
+              onClick={toggleWatchlist}
+              disabled={watchlistLoading}
+              className={`flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border w-full cursor-pointer ${
+                isWatchlisted
+                  ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/25"
+                  : "bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-lg shadow-blue-600/15"
+              }`}
+            >
+              {watchlistLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : isWatchlisted ? (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove from Watchlist</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add to Watchlist</span>
+                </>
+              )}
+            </button>
             <a
               href={`#/compare`}
               className="flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border border-[#242D3D]/60 bg-[#161B26]/30 text-gray-300 hover:bg-[#242D3D]/40 hover:text-white text-center w-full"
@@ -803,7 +799,6 @@ export const StockDetail = ({ ticker }) => {
           )}
         </div>
 
-      </div>
       </div>
     </div>
   );
