@@ -46,10 +46,6 @@ def normalize_dividend_yield(val: Any, is_percentage: bool = False) -> Optional[
         return None
     if is_percentage:
         return f_val / 100.0
-    # Defensive check: if somehow a decimal yield provider returns a value > 1.0 (e.g. 2.5 meaning 2.5%),
-    # we normalize it. Otherwise we keep the decimal fraction (e.g. 0.025).
-    if f_val > 1.0:
-        return f_val / 100.0
     return f_val
 
 def _yahoo_get_json(url: str, timeout: int = 10) -> Optional[dict]:
@@ -233,7 +229,7 @@ def _fetch_overview_from_yfinance(ticker: str) -> Optional[StockOverview]:
                 info.get("previousClose")
             )
             raw_yield = info.get("dividendYield")
-            dividend_yield = normalize_dividend_yield(raw_yield, is_percentage=False)
+            dividend_yield = normalize_dividend_yield(raw_yield, is_percentage=True)
             
             currency = info.get("currency")
             if not currency:
