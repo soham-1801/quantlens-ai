@@ -238,7 +238,7 @@ export const StockDetail = ({ ticker }) => {
   return (
     <div className="space-y-6 w-full max-w-none px-4 lg:px-6 animate-fade-in">
       {/* Header */}
-      <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3" id="section-overview">
+      <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3 sticky top-14 md:top-16 z-30" id="section-overview">
         <div className="flex items-start gap-3 min-w-0">
           <button
             onClick={goBack}
@@ -294,7 +294,7 @@ export const StockDetail = ({ ticker }) => {
 
       {/* Section Navigation */}
       {showNav && (
-        <div className="sticky top-0 z-40 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 bg-[#0B0F19]/90 backdrop-blur-xl border-b border-[#242D3D]/60 py-0">
+        <div className="sticky top-[112px] md:top-[136px] z-20 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 bg-[#0B0F19]/90 backdrop-blur-xl border-b border-[#242D3D]/60 py-0">
           <div className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto">
             {NAV_TABS.map((tab) => (
               <button

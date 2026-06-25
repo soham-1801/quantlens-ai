@@ -39,7 +39,7 @@ export const Layout = ({ children, onNavigate, currentPage }) => {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="h-screen bg-[#0B0F19] text-gray-100 flex flex-col md:flex-row overflow-hidden">
+    <div className="min-h-screen bg-[#0B0F19] text-gray-100 flex flex-col md:flex-row">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -51,8 +51,8 @@ export const Layout = ({ children, onNavigate, currentPage }) => {
       {/* Sidebar — persistent on md+, drawer on mobile */}
       <aside
         className={`
-          fixed md:sticky inset-y-0 md:top-0 left-0 z-50
-          w-72 md:w-64 md:h-screen
+          fixed md:static inset-y-0 left-0 z-50
+          w-72 md:w-64
           bg-[#111622] border-r border-[#242D3D]
           flex flex-col shrink-0
           transition-transform duration-300 ease-in-out
@@ -147,7 +147,7 @@ export const Layout = ({ children, onNavigate, currentPage }) => {
       </aside>
 
       {/* Main area */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+      <main className="flex-1 flex flex-col min-w-0">
         {/* Header bar */}
         <header className="sticky top-0 h-14 md:h-16 border-b border-[#242D3D] bg-[#111622]/80 backdrop-blur-md px-3 md:px-6 flex items-center justify-between z-30 gap-2">
           <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
