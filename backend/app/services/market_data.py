@@ -5,11 +5,14 @@ import pandas as pd
 import numpy as np
 import math
 import time
+import threading
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from cachetools import TTLCache
 from app.core.config import settings
 from app.schemas.stock import StockSearchResult, StockOverview, StockHistoryPoint, StockNewsArticle
+
+YAHOO_LOCK = threading.Lock()
 
 YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -50,20 +53,21 @@ def normalize_dividend_yield(val: Any, is_percentage: bool = False) -> Optional[
     return f_val
 
 def _yahoo_get_json(url: str, timeout: int = 10) -> Optional[dict]:
-    for attempt in range(2):
-        try:
-            resp = requests.get(url, headers=YAHOO_HEADERS, timeout=timeout)
-            if resp.status_code == 429:
-                time.sleep(1)
-                continue
-            if resp.status_code == 401:
+    with YAHOO_LOCK:
+        for attempt in range(2):
+            try:
+                resp = requests.get(url, headers=YAHOO_HEADERS, timeout=timeout)
+                if resp.status_code == 429:
+                    time.sleep(1)
+                    continue
+                if resp.status_code == 401:
+                    return None
+                if resp.status_code == 200:
+                    return resp.json()
                 return None
-            if resp.status_code == 200:
-                return resp.json()
-            return None
-        except requests.RequestException:
-            time.sleep(0.5)
-    return None
+            except requests.RequestException:
+                time.sleep(0.5)
+        return None
 
 def _finnhub_get(endpoint: str, params: dict = None) -> Optional[dict]:
     api_key = settings.FINNHUB_API_KEY
@@ -216,65 +220,67 @@ def _fetch_overview_from_yahoo_direct(ticker: str) -> Optional[StockOverview]:
     )
 
 def _fetch_overview_from_yfinance(ticker: str) -> Optional[StockOverview]:
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        info = ticker_obj.info
-        if not info or len(info) < 5:
-            return None
-        current_price = (
-            info.get("currentPrice") or
-            info.get("regularMarketPrice") or
-            info.get("regularMarketPreviousClose") or
-            info.get("previousClose")
-        )
-        raw_yield = info.get("dividendYield")
-        dividend_yield = normalize_dividend_yield(raw_yield, is_percentage=False)
-        
-        currency = info.get("currency")
-        if not currency:
-            try:
-                currency = getattr(ticker_obj, "fast_info", {}).get("currency")
-            except Exception:
-                pass
-        if not currency:
-            currency = "INR" if (ticker.upper().endswith(".NS") or ticker.upper().endswith(".BO")) else "USD"
+    with YAHOO_LOCK:
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            info = ticker_obj.info
+            if not info or len(info) < 5:
+                return None
+            current_price = (
+                info.get("currentPrice") or
+                info.get("regularMarketPrice") or
+                info.get("regularMarketPreviousClose") or
+                info.get("previousClose")
+            )
+            raw_yield = info.get("dividendYield")
+            dividend_yield = normalize_dividend_yield(raw_yield, is_percentage=False)
+            
+            currency = info.get("currency")
+            if not currency:
+                try:
+                    currency = getattr(ticker_obj, "fast_info", {}).get("currency")
+                except Exception:
+                    pass
+            if not currency:
+                currency = "INR" if (ticker.upper().endswith(".NS") or ticker.upper().endswith(".BO")) else "USD"
 
-        return StockOverview(
-            ticker=info.get("symbol", ticker).upper(),
-            name=info.get("longName") or info.get("shortName") or ticker,
-            description=info.get("longBusinessSummary"),
-            sector=info.get("sector"),
-            industry=info.get("industry"),
-            exchange=info.get("exchange") or info.get("fullExchangeName"),
-            website=info.get("website"),
-            market_cap=safe_int(info.get("marketCap")),
-            pe_ratio=safe_float(info.get("trailingPE") or info.get("forwardPE")),
-            dividend_yield=dividend_yield,
-            currency=currency,
-            current_price=safe_float(current_price),
-            day_high=safe_float(info.get("dayHigh") or info.get("regularMarketDayHigh")),
-            day_low=safe_float(info.get("dayLow") or info.get("regularMarketDayLow")),
-            fifty_two_week_high=safe_float(info.get("fiftyTwoWeekHigh")),
-            fifty_two_week_low=safe_float(info.get("fiftyTwoWeekLow")),
-            volume=safe_int(info.get("volume") or info.get("regularMarketVolume")),
-            previous_close=safe_float(info.get("previousClose") or info.get("regularMarketPreviousClose")),
-            open_price=safe_float(info.get("open") or info.get("regularMarketOpen")),
-            eps=safe_float(info.get("trailingEps") or info.get("forwardEps")),
-            beta=safe_float(info.get("beta")),
-            avg_volume=safe_int(info.get("averageVolume") or info.get("averageDailyVolume10Day") or info.get("averageVolume10days"))
-        )
-    except Exception:
-        return None
+            return StockOverview(
+                ticker=info.get("symbol", ticker).upper(),
+                name=info.get("longName") or info.get("shortName") or ticker,
+                description=info.get("longBusinessSummary"),
+                sector=info.get("sector"),
+                industry=info.get("industry"),
+                exchange=info.get("exchange") or info.get("fullExchangeName"),
+                website=info.get("website"),
+                market_cap=safe_int(info.get("marketCap")),
+                pe_ratio=safe_float(info.get("trailingPE") or info.get("forwardPE")),
+                dividend_yield=dividend_yield,
+                currency=currency,
+                current_price=safe_float(current_price),
+                day_high=safe_float(info.get("dayHigh") or info.get("regularMarketDayHigh")),
+                day_low=safe_float(info.get("dayLow") or info.get("regularMarketDayLow")),
+                fifty_two_week_high=safe_float(info.get("fiftyTwoWeekHigh")),
+                fifty_two_week_low=safe_float(info.get("fiftyTwoWeekLow")),
+                volume=safe_int(info.get("volume") or info.get("regularMarketVolume")),
+                previous_close=safe_float(info.get("previousClose") or info.get("regularMarketPreviousClose")),
+                open_price=safe_float(info.get("open") or info.get("regularMarketOpen")),
+                eps=safe_float(info.get("trailingEps") or info.get("forwardEps")),
+                beta=safe_float(info.get("beta")),
+                avg_volume=safe_int(info.get("averageVolume") or info.get("averageDailyVolume10Day") or info.get("averageVolume10days"))
+            )
+        except Exception:
+            return None
 
 def _fetch_history_yfinance(ticker: str, yf_period: str, yf_interval: str) -> Optional[pd.DataFrame]:
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        df = ticker_obj.history(period=yf_period, interval=yf_interval)
-        if df is not None and not df.empty:
-            return df
-    except Exception:
-        pass
-    return None
+    with YAHOO_LOCK:
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            df = ticker_obj.history(period=yf_period, interval=yf_interval)
+            if df is not None and not df.empty:
+                return df
+        except Exception:
+            pass
+        return None
 
 def _fetch_earnings_yahoo_direct(ticker: str) -> Optional[dict]:
     url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=earnings,earningsHistory,financialData,calendarEvents"
@@ -362,37 +368,38 @@ def _fetch_earnings_finnhub(ticker: str) -> Optional[dict]:
     }
 
 def _fetch_earnings_yfinance(ticker: str) -> Optional[dict]:
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        calendar = getattr(ticker_obj, "calendar", None)
-        if not calendar or not isinstance(calendar, dict):
-            return None
-        
-        next_date = None
-        dates = calendar.get("Earnings Date")
-        if isinstance(dates, list) and len(dates) > 0:
-            import datetime
-            d = dates[0]
-            if isinstance(d, datetime.date):
-                next_date = d.strftime("%Y-%m-%d")
-            else:
-                next_date = str(d)
-        
-        eps_est = calendar.get("Earnings Average")
-        rev_est = calendar.get("Revenue Average")
-        
-        if not next_date and eps_est is None and rev_est is None:
-            return None
+    with YAHOO_LOCK:
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            calendar = getattr(ticker_obj, "calendar", None)
+            if not calendar or not isinstance(calendar, dict):
+                return None
             
-        return {
-            "next_earnings_date": next_date or "Est. within 45 days",
-            "revenue_estimate": safe_float(rev_est),
-            "eps_estimate": safe_float(eps_est),
-            "previous_eps": None,
-            "earnings_surprise": None
-        }
-    except Exception:
-        return None
+            next_date = None
+            dates = calendar.get("Earnings Date")
+            if isinstance(dates, list) and len(dates) > 0:
+                import datetime
+                d = dates[0]
+                if isinstance(d, datetime.date):
+                    next_date = d.strftime("%Y-%m-%d")
+                else:
+                    next_date = str(d)
+            
+            eps_est = calendar.get("Earnings Average")
+            rev_est = calendar.get("Revenue Average")
+            
+            if not next_date and eps_est is None and rev_est is None:
+                return None
+                
+            return {
+                "next_earnings_date": next_date or "Est. within 45 days",
+                "revenue_estimate": safe_float(rev_est),
+                "eps_estimate": safe_float(eps_est),
+                "previous_eps": None,
+                "earnings_surprise": None
+            }
+        except Exception:
+            return None
 
 def _fetch_news_yahoo_direct(ticker: str) -> Optional[List[StockNewsArticle]]:
     url = f"https://query2.finance.yahoo.com/v1/finance/search?q={ticker}&newsCount=20"
@@ -418,27 +425,28 @@ def _fetch_news_yahoo_direct(ticker: str) -> Optional[List[StockNewsArticle]]:
     return articles if articles else None
 
 def _fetch_news_yfinance(ticker: str) -> Optional[List[StockNewsArticle]]:
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        news = ticker_obj.news
-        if not news:
+    with YAHOO_LOCK:
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            news = ticker_obj.news
+            if not news:
+                return None
+            articles = []
+            for article in news:
+                title = article.get("title")
+                link = article.get("link")
+                published_at = article.get("providerPublishTime")
+                publisher = article.get("publisher") or "Unknown"
+                if title and link and published_at:
+                    articles.append(StockNewsArticle(
+                        title=title,
+                        publisher=publisher,
+                        link=link,
+                        published_at=published_at
+                    ))
+            return articles if articles else None
+        except Exception:
             return None
-        articles = []
-        for article in news:
-            title = article.get("title")
-            link = article.get("link")
-            published_at = article.get("providerPublishTime")
-            publisher = article.get("publisher") or "Unknown"
-            if title and link and published_at:
-                articles.append(StockNewsArticle(
-                    title=title,
-                    publisher=publisher,
-                    link=link,
-                    published_at=published_at
-                ))
-        return articles if articles else None
-    except Exception:
-        return None
 
 
 class MarketDataService:
@@ -538,30 +546,52 @@ class MarketDataService:
         ticker_upper = ticker.upper().strip()
         if ticker_upper in MarketDataService._overview_cache:
             return MarketDataService._overview_cache[ticker_upper]
-        result = (
-            _fetch_overview_from_finnhub(ticker_upper)
-            or _fetch_overview_from_yahoo_direct(ticker_upper)
-            or _fetch_overview_from_yfinance(ticker_upper)
-        )
+
+        def merge_missing_fields(target: StockOverview, source: StockOverview):
+            for field in [
+                "current_price", "previous_close", "open_price", "day_high", "day_low",
+                "fifty_two_week_high", "fifty_two_week_low", "volume", "avg_volume",
+                "market_cap", "pe_ratio", "dividend_yield", "eps", "beta",
+                "sector", "industry", "description", "exchange", "website", "currency"
+            ]:
+                if getattr(target, field) is None:
+                    setattr(target, field, getattr(source, field))
+
+        # Cascading live fetches without any database fallbacks
+        result = _fetch_overview_from_finnhub(ticker_upper)
         if result:
-            if result.current_price is None or result.volume is None:
-                fallback = _fetch_overview_from_yahoo_direct(ticker_upper) or _fetch_overview_from_yfinance(ticker_upper)
-                if fallback:
-                    if result.current_price is None:
-                        result.current_price = fallback.current_price
-                    if result.volume is None:
-                        result.volume = fallback.volume
-                    if result.previous_close is None:
-                        result.previous_close = fallback.previous_close
-                    if result.open_price is None:
-                        result.open_price = fallback.open_price
-                    if result.day_high is None:
-                        result.day_high = fallback.day_high
-                    if result.day_low is None:
-                        result.day_low = fallback.day_low
-                    if result.avg_volume is None:
-                        result.avg_volume = fallback.avg_volume
+            has_missing = any(getattr(result, f) is None for f in [
+                "current_price", "previous_close", "volume", "avg_volume",
+                "market_cap", "pe_ratio", "dividend_yield", "eps"
+            ])
+            if has_missing:
+                yahoo_direct = _fetch_overview_from_yahoo_direct(ticker_upper)
+                if yahoo_direct:
+                    merge_missing_fields(result, yahoo_direct)
             
+            has_missing = any(getattr(result, f) is None for f in [
+                "current_price", "previous_close", "volume", "avg_volume",
+                "market_cap", "pe_ratio", "dividend_yield", "eps"
+            ])
+            if has_missing:
+                yf_overview = _fetch_overview_from_yfinance(ticker_upper)
+                if yf_overview:
+                    merge_missing_fields(result, yf_overview)
+        else:
+            result = _fetch_overview_from_yahoo_direct(ticker_upper)
+            if result:
+                has_missing = any(getattr(result, f) is None for f in [
+                    "current_price", "previous_close", "volume", "avg_volume",
+                    "market_cap", "pe_ratio", "dividend_yield", "eps"
+                ])
+                if has_missing:
+                    yf_overview = _fetch_overview_from_yfinance(ticker_upper)
+                    if yf_overview:
+                        merge_missing_fields(result, yf_overview)
+            else:
+                result = _fetch_overview_from_yfinance(ticker_upper)
+
+        if result:
             MarketDataService._overview_cache[ticker_upper] = result
         return result
 
