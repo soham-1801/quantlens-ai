@@ -423,7 +423,7 @@ export const StockDetail = ({ ticker }) => {
           </div>
 
           {/* AI Research Summary */}
-          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden w-full" id="section-ai-research">
+          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden w-full max-w-4xl mx-auto" id="section-ai-research">
             <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
               <Lightbulb className="w-4 h-4 text-amber-400" />
               <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">AI Research Summary</h3>
@@ -513,7 +513,7 @@ export const StockDetail = ({ ticker }) => {
           </div>
 
           {/* Earnings Intelligence */}
-          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden" id="section-earnings">
+          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden w-full max-w-4xl mx-auto" id="section-earnings">
             <div className="flex items-center justify-between px-5 py-3 border-b border-[#242D3D]/40">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded flex items-center justify-center text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
@@ -764,7 +764,7 @@ export const StockDetail = ({ ticker }) => {
 
           {/* Risk & Opportunity Card */}
           {recommendation && (
-            <div className="glass-card rounded-2xl p-4 flex flex-col gap-2.5">
+            <div className="glass-card rounded-2xl p-4 flex flex-col gap-2.5 xl:min-h-[380px]">
               <div className="flex items-center justify-between border-b border-[#242D3D]/40 pb-2">
                 <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Risk Profile</span>
                 {(() => {
