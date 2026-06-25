@@ -423,7 +423,7 @@ export const StockDetail = ({ ticker }) => {
           </div>
 
           {/* AI Research Summary */}
-          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden" id="section-ai-research">
+          <div className="glass-card rounded-xl sm:rounded-2xl scroll-mt-20 overflow-hidden w-full" id="section-ai-research">
             <div className="flex items-center gap-2 px-5 py-3 border-b border-[#242D3D]/40">
               <Lightbulb className="w-4 h-4 text-amber-400" />
               <h3 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">AI Research Summary</h3>
