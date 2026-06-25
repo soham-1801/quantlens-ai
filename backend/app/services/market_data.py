@@ -111,6 +111,9 @@ def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
     metric = _finnhub_metric(ticker)
     if not profile:
         return None
+    
+    quote = _finnhub_get("quote", {"symbol": ticker}) or {}
+    
     cap_raw = profile.get("marketCapitalization")
     market_cap = (safe_int(cap_raw) * 1_000_000) if cap_raw is not None else None
     
@@ -133,14 +136,14 @@ def _fetch_overview_from_finnhub(ticker: str) -> Optional[StockOverview]:
         pe_ratio=safe_float(metric.get("peTTM") if metric else None),
         dividend_yield=dividend_yield,
         currency=currency,
-        current_price=None,
-        day_high=None,
-        day_low=None,
+        current_price=safe_float(quote.get("c")),
+        day_high=safe_float(quote.get("h")),
+        day_low=safe_float(quote.get("l")),
         fifty_two_week_high=safe_float(metric.get("52WeekHigh") if metric else None),
         fifty_two_week_low=safe_float(metric.get("52WeekLow") if metric else None),
         volume=None,
-        previous_close=safe_float(metric.get("previousClose") if metric else None),
-        open_price=None,
+        previous_close=safe_float(quote.get("pc") or (metric.get("previousClose") if metric else None)),
+        open_price=safe_float(quote.get("o")),
         eps=safe_float(metric.get("epsTTM") if metric else None),
         beta=safe_float(metric.get("beta") if metric else None),
         avg_volume=safe_int(metric.get("averageVolume") if metric else None)
@@ -541,6 +544,24 @@ class MarketDataService:
             or _fetch_overview_from_yfinance(ticker_upper)
         )
         if result:
+            if result.current_price is None or result.volume is None:
+                fallback = _fetch_overview_from_yahoo_direct(ticker_upper) or _fetch_overview_from_yfinance(ticker_upper)
+                if fallback:
+                    if result.current_price is None:
+                        result.current_price = fallback.current_price
+                    if result.volume is None:
+                        result.volume = fallback.volume
+                    if result.previous_close is None:
+                        result.previous_close = fallback.previous_close
+                    if result.open_price is None:
+                        result.open_price = fallback.open_price
+                    if result.day_high is None:
+                        result.day_high = fallback.day_high
+                    if result.day_low is None:
+                        result.day_low = fallback.day_low
+                    if result.avg_volume is None:
+                        result.avg_volume = fallback.avg_volume
+            
             MarketDataService._overview_cache[ticker_upper] = result
         return result
 
