@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { MessageSquare, ExternalLink, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 export const SentimentCards = ({ sentiment }) => {
+  const [expandedArticles, setExpandedArticles] = useState(false);
+
   if (!sentiment) return null;
 
   const gaugePosition = (score) => {
@@ -136,7 +138,7 @@ export const SentimentCards = ({ sentiment }) => {
   if (!hasNews) return null;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
       <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-3xl p-4 md:p-5 backdrop-blur-md flex flex-col gap-4">
         <h3 className="text-xs text-gray-300 font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0 border-b border-[#242D3D]/40 pb-3">
           <Activity className="w-3.5 h-3.5 text-blue-500" /> AI Sentiment Analysis
@@ -302,9 +304,9 @@ export const SentimentCards = ({ sentiment }) => {
           })()}
         </div>
 
-        <div className="min-h-0 pr-0">
+        <div className="min-h-0 pr-0 flex-1 flex flex-col justify-between">
           <div className="divide-y divide-[#242D3D]/40 text-[11px]">
-            {sentiment.articles.map((article, idx) => {
+            {(expandedArticles ? sentiment.articles : sentiment.articles.slice(0, 5)).map((article, idx) => {
               const articleConfig = getSentimentConfig(article.sentiment_score || 0.0);
               return (
                 <div key={idx} className="py-2.5 flex items-start justify-between gap-4 group hover:bg-white/5 px-2 rounded-xl transition-colors">
@@ -332,6 +334,14 @@ export const SentimentCards = ({ sentiment }) => {
               );
             })}
           </div>
+          {sentiment.articles.length > 5 && (
+            <button
+              onClick={() => setExpandedArticles(!expandedArticles)}
+              className="w-full mt-4 py-2 text-center text-xs font-bold text-blue-500 hover:text-blue-400 hover:bg-blue-500/5 rounded-xl border border-blue-500/20 active:scale-98 transition-all shrink-0"
+            >
+              {expandedArticles ? "Show Less" : "View All News →"}
+            </button>
+          )}
         </div>
       </div>
     </div>
