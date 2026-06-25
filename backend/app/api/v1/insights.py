@@ -207,23 +207,45 @@ def get_ticker_earnings(
             eps_estimate=None,
             previous_eps=None,
             earnings_surprise=None,
-            message="Earnings data currently unavailable"
+            message="Earnings data currently unavailable from upstream providers."
         )
 
     next_date = earnings_data.get("next_earnings_date") or "Est. within 45 days"
     eps_est = earnings_data.get("eps_estimate")
     prev_eps = earnings_data.get("previous_eps")
+    surprise = earnings_data.get("earnings_surprise")
+    rev_est = earnings_data.get("revenue_estimate")
 
-    if eps_est is None and prev_eps:
-        eps_est = round(prev_eps * 1.05, 2)
+    # Construct the descriptive message dynamically based on actual data
+    status_parts = []
+    
+    # 1. Consensus estimates
+    if eps_est is not None or rev_est is not None:
+        status_parts.append("Consensus estimates available.")
+        
+    # 2. Upcoming earnings schedule
+    if next_date and next_date != "Est. within 45 days" and not next_date.startswith("Est."):
+        status_parts.append("Upcoming earnings scheduled.")
+        
+    # 3. Historical EPS & surprise
+    if prev_eps is not None and surprise is not None:
+        status_parts.append("Historical earnings data retrieved successfully.")
+    else:
+        if prev_eps is None:
+            status_parts.append("Historical EPS not provided by upstream provider.")
+        if surprise is None:
+            status_parts.append("Earnings surprise unavailable from upstream provider.")
+            
+    message_str = " ".join(status_parts)
 
     return EarningsSummary(
         ticker=ticker_upper,
         next_earnings_date=next_date,
-        revenue_estimate=earnings_data.get("revenue_estimate"),
+        revenue_estimate=rev_est,
         eps_estimate=eps_est,
         previous_eps=prev_eps,
-        earnings_surprise=earnings_data.get("earnings_surprise")
+        earnings_surprise=surprise,
+        message=message_str
     )
 
 

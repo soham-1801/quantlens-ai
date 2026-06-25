@@ -372,31 +372,56 @@ def _fetch_earnings_yfinance(ticker: str) -> Optional[dict]:
         try:
             ticker_obj = yf.Ticker(ticker)
             calendar = getattr(ticker_obj, "calendar", None)
-            if not calendar or not isinstance(calendar, dict):
-                return None
             
             next_date = None
-            dates = calendar.get("Earnings Date")
-            if isinstance(dates, list) and len(dates) > 0:
-                import datetime
-                d = dates[0]
-                if isinstance(d, datetime.date):
-                    next_date = d.strftime("%Y-%m-%d")
-                else:
-                    next_date = str(d)
+            eps_est = None
+            rev_est = None
             
-            eps_est = calendar.get("Earnings Average")
-            rev_est = calendar.get("Revenue Average")
+            if calendar and isinstance(calendar, dict):
+                dates = calendar.get("Earnings Date")
+                if isinstance(dates, list) and len(dates) > 0:
+                    import datetime
+                    d = dates[0]
+                    if isinstance(d, datetime.date):
+                        next_date = d.strftime("%Y-%m-%d")
+                    else:
+                        next_date = str(d)
+                
+                eps_est = calendar.get("Earnings Average")
+                rev_est = calendar.get("Revenue Average")
             
-            if not next_date and eps_est is None and rev_est is None:
+            prev_eps = None
+            surprise = None
+            
+            # Fetch historical EPS and surprise percent dynamically from yfinance
+            eh = None
+            try:
+                if hasattr(ticker_obj, "earnings_history"):
+                    eh = ticker_obj.earnings_history
+                if eh is None or (isinstance(eh, pd.DataFrame) and eh.empty):
+                    if hasattr(ticker_obj, "get_earnings_history"):
+                        get_eh = ticker_obj.get_earnings_history
+                        if callable(get_eh):
+                            eh = get_eh()
+            except Exception:
+                pass
+                
+            if eh is not None and isinstance(eh, pd.DataFrame) and not eh.empty:
+                latest_quarter = eh.iloc[-1]
+                prev_eps = safe_float(latest_quarter.get("epsActual"))
+                raw_surprise = safe_float(latest_quarter.get("surprisePercent"))
+                if raw_surprise is not None:
+                    surprise = raw_surprise * 100.0  # convert fraction to percent
+
+            if not next_date and eps_est is None and rev_est is None and prev_eps is None:
                 return None
                 
             return {
                 "next_earnings_date": next_date or "Est. within 45 days",
                 "revenue_estimate": safe_float(rev_est),
                 "eps_estimate": safe_float(eps_est),
-                "previous_eps": None,
-                "earnings_surprise": None
+                "previous_eps": safe_float(prev_eps),
+                "earnings_surprise": safe_float(surprise)
             }
         except Exception:
             return None
@@ -710,11 +735,37 @@ class MarketDataService:
         ticker_upper = ticker.upper().strip()
         if ticker_upper in MarketDataService._earnings_cache:
             return MarketDataService._earnings_cache[ticker_upper]
-        result = (
-            _fetch_earnings_finnhub(ticker_upper)
-            or _fetch_earnings_yahoo_direct(ticker_upper)
-            or _fetch_earnings_yfinance(ticker_upper)
-        )
+
+        def merge_earnings_fields(target: dict, source: dict):
+            for field in ["next_earnings_date", "revenue_estimate", "eps_estimate", "previous_eps", "earnings_surprise"]:
+                if target.get(field) is None and source.get(field) is not None:
+                    target[field] = source[field]
+
+        # Cascading live fetches without any database fallbacks
+        result = _fetch_earnings_finnhub(ticker_upper)
+        if result:
+            has_missing = any(result.get(f) is None for f in ["previous_eps", "earnings_surprise", "eps_estimate"])
+            if has_missing:
+                yahoo_data = _fetch_earnings_yahoo_direct(ticker_upper)
+                if yahoo_data:
+                    merge_earnings_fields(result, yahoo_data)
+            
+            has_missing = any(result.get(f) is None for f in ["previous_eps", "earnings_surprise", "eps_estimate"])
+            if has_missing:
+                yf_data = _fetch_earnings_yfinance(ticker_upper)
+                if yf_data:
+                    merge_earnings_fields(result, yf_data)
+        else:
+            result = _fetch_earnings_yahoo_direct(ticker_upper)
+            if result:
+                has_missing = any(result.get(f) is None for f in ["previous_eps", "earnings_surprise", "eps_estimate"])
+                if has_missing:
+                    yf_data = _fetch_earnings_yfinance(ticker_upper)
+                    if yf_data:
+                        merge_earnings_fields(result, yf_data)
+            else:
+                result = _fetch_earnings_yfinance(ticker_upper)
+
         if result:
             MarketDataService._earnings_cache[ticker_upper] = result
         return result
