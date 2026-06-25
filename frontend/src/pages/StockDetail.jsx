@@ -264,6 +264,32 @@ export const StockDetail = ({ ticker }) => {
             </div>
           )}
         </div>
+
+        {overview && (
+          <button
+            onClick={toggleWatchlist}
+            disabled={watchlistLoading}
+            className={`flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border cursor-pointer shrink-0 w-fit ${
+              isWatchlisted
+                ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/25"
+                : "bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-lg shadow-blue-600/15"
+            }`}
+          >
+            {watchlistLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : isWatchlisted ? (
+              <>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove from Watchlist</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add to Watchlist</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Section Navigation */}
@@ -635,29 +661,6 @@ export const StockDetail = ({ ticker }) => {
           
           {/* Action Buttons */}
           <div className="glass-card rounded-2xl p-4 flex flex-col gap-2">
-            <button
-              onClick={toggleWatchlist}
-              disabled={watchlistLoading}
-              className={`flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border w-full cursor-pointer ${
-                isWatchlisted
-                  ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/25"
-                  : "bg-blue-600 hover:bg-blue-500 text-white border-transparent shadow-lg shadow-blue-600/15"
-              }`}
-            >
-              {watchlistLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : isWatchlisted ? (
-                <>
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Remove from Watchlist</span>
-                </>
-              ) : (
-                <>
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add to Watchlist</span>
-                </>
-              )}
-            </button>
             <a
               href={`#/compare`}
               className="flex items-center justify-center gap-2 font-bold text-[10px] tracking-wider uppercase px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all border border-[#242D3D]/60 bg-[#161B26]/30 text-gray-300 hover:bg-[#242D3D]/40 hover:text-white text-center w-full"
