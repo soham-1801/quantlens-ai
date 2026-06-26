@@ -47,6 +47,10 @@
 
 ![Compare](screenshots/Compare.png)
 
+### Portfolio
+
+![Portfolio](screenshots/portfolio.png)
+
 ### AI Sentiment Analysis
 
 ![Sentiment Analysis](screenshots/sentiment-news.jpeg)
