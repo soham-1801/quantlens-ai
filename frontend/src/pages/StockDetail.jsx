@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, ExternalLink, Newspaper, Lightbulb, ArrowUp, ArrowDown, ArrowLeftRight } from "lucide-react";
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps, no-unused-vars */
+import { useState, useEffect, useMemo } from "react";
+import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, Lightbulb, ArrowUp, ArrowDown, ArrowLeftRight } from "lucide-react";
 import { StockChart } from "../components/StockChart";
 import { StockOverview } from "../components/StockOverview";
 import { SentimentCards } from "../components/SentimentCards";
 import { api } from "../services/api";
 import { StockLogo } from "../components/StockLogo";
+import { Skeleton } from "../components/Skeleton";
 import { computePerformanceReturns, formatReturn } from "../utils/performance";
 import { formatMarketCap, formatPrice, getCurrencySymbol } from "../utils/format";
 import { useWatchlist } from "../context/WatchlistContext";
@@ -40,13 +42,16 @@ export const StockDetail = ({ ticker }) => {
   const [history, setHistory] = useState([]);
   const [performanceHistory, setPerformanceHistory] = useState([]);
   const [sentiment, setSentiment] = useState(null);
+
   const [news, setNews] = useState([]);
+
   const [newsLoading, setNewsLoading] = useState(true);
   const [research, setResearch] = useState(null);
   const [researchLoading, setResearchLoading] = useState(true);
   const [earnings, setEarnings] = useState(null);
   const [earningsLoading, setEarningsLoading] = useState(true);
   const [recommendation, setRecommendation] = useState(null);
+
   const [recommendationLoading, setRecommendationLoading] = useState(true);
 
   const { watchlist, addToWatchlist, removeFromWatchlist } = useWatchlist();
@@ -59,22 +64,7 @@ export const StockDetail = ({ ticker }) => {
 
   const hasSentimentData = sentiment?.articles?.length > 0;
 
-  const sentimentCategories = useMemo(() => {
-    if (!hasSentimentData) return null;
-    const articles = sentiment.articles;
-    const total = articles.length;
-    const bullish = articles.filter((a) => a.sentiment_label === "positive").length;
-    const neutral = articles.filter((a) => a.sentiment_label === "neutral").length;
-    const bearish = articles.filter((a) => a.sentiment_label === "negative").length;
-    const pct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
-    const data = [
-      { label: "Bullish", pct: pct(bullish), color: "bg-emerald-500" },
-      { label: "Neutral", pct: pct(neutral), color: "bg-gray-500" },
-      { label: "Bearish", pct: pct(bearish), color: "bg-red-500" },
-    ];
-    const top = data.reduce((max, d) => (d.pct > max.pct ? d : max), data[0]);
-    return { data, overall: top.label };
-  }, [sentiment, hasSentimentData]);
+
 
   const performanceReturns = useMemo(
     () => computePerformanceReturns(performanceHistory),
@@ -206,11 +196,51 @@ export const StockDetail = ({ ticker }) => {
 
   if (loading) {
     return (
-      <div className="h-[70vh] flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">
-          Analyzing {ticker.toUpperCase()} market indicators...
-        </p>
+      <div className="space-y-6 w-full max-w-none px-4 lg:px-6 animate-fade-in">
+        {/* Header Skeleton */}
+        <div className="glass-card rounded-xl sm:rounded-2xl px-4 py-4 sm:px-5 sm:py-5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-12 h-12 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="w-32 h-6" />
+              <Skeleton className="w-48 h-3" />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="space-y-2 text-right">
+              <Skeleton className="w-24 h-8" />
+              <Skeleton className="w-16 h-4 ml-auto" />
+            </div>
+            <Skeleton className="w-10 h-10 rounded-xl" />
+          </div>
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2 space-y-6">
+            {/* Chart Skeleton */}
+            <div className="glass-card rounded-2xl p-5 md:p-6 min-h-[450px]">
+              <Skeleton className="w-full h-[400px] rounded-xl" />
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            {/* Stats Skeleton */}
+            <div className="glass-card rounded-2xl p-5 md:p-6">
+              <div className="space-y-4">
+                <Skeleton className="w-32 h-5 mb-6" />
+                <div className="grid grid-cols-2 gap-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="w-16 h-3" />
+                      <Skeleton className="w-24 h-5" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

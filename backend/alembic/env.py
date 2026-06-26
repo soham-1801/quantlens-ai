@@ -13,6 +13,8 @@ from app.core.database import Base
 from app.core.config import settings
 from app.models.user import User
 from app.models.watchlist import Watchlist
+from app.models.sentiment_cache import SentimentCache
+from app.models.portfolio import PortfolioItem
 
 # This is the Alembic Config object
 config = context.config

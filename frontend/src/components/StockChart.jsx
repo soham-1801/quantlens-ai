@@ -1,4 +1,3 @@
-import React from "react";
 import {
   AreaChart,
   Area,
@@ -17,6 +16,51 @@ const GRADIENTS = [
   { id: "colorB", color: "#22D3EE" },
 ];
 
+const CustomTooltip = ({ active, payload, label, comparison, currency, ticker }) => {
+  if (!active || !payload || !payload.length) return null;
+  const validPayload = payload.filter(p => p.value != null && Number.isFinite(p.value));
+  if (!validPayload.length) return null;
+  return (
+    <div
+      className="backdrop-blur-md border border-[#2E3A50]/70 rounded-md z-50"
+      style={{
+        background: "rgba(11,15,25,0.92)",
+        padding: "5px 9px",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+      }}
+    >
+      <p className="text-gray-500 mb-[2px] text-[9px] font-semibold tracking-wide">{label}</p>
+      {validPayload.map((entry, idx) => (
+        <p
+          key={idx}
+          className="font-black tabular-nums text-[11px]"
+          style={{ color: entry.color }}
+        >
+          {entry.name}:{" "}
+          {comparison
+            ? `${entry.value >= 0 ? "+" : ""}${entry.value.toFixed(2)}%`
+            : formatPrice(entry.value, currency, ticker)}
+        </p>
+      ))}
+    </div>
+  );
+};
+
+const CustomCursor = ({ x, y, height }) => {
+  if (x == null || y == null || height == null || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(height)) {
+    return null;
+  }
+  return (
+    <line
+      x1={x} y1={y} x2={x} y2={y + height}
+      stroke="#3B82F6"
+      strokeOpacity={0.18}
+      strokeWidth={1}
+      strokeDasharray="3 2"
+    />
+  );
+};
+
 export const StockChart = ({ history, period, onPeriodChange, comparison, tickers, currency, ticker }) => {
   const periods = [
     { label: "1M", value: "1m" },
@@ -24,51 +68,6 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
     { label: "1Y", value: "1y" },
     { label: "5Y", value: "5y" },
   ];
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (!active || !payload || !payload.length) return null;
-    const validPayload = payload.filter(p => p.value != null && Number.isFinite(p.value));
-    if (!validPayload.length) return null;
-    return (
-      <div
-        className="backdrop-blur-md border border-[#2E3A50]/70 rounded-md z-50"
-        style={{
-          background: "rgba(11,15,25,0.92)",
-          padding: "5px 9px",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-        }}
-      >
-        <p className="text-gray-500 mb-[2px] text-[9px] font-semibold tracking-wide">{label}</p>
-        {validPayload.map((entry, idx) => (
-          <p
-            key={idx}
-            className="font-black tabular-nums text-[11px]"
-            style={{ color: entry.color }}
-          >
-            {entry.name}:{" "}
-            {comparison
-              ? `${entry.value >= 0 ? "+" : ""}${entry.value.toFixed(2)}%`
-              : formatPrice(entry.value, currency, ticker)}
-          </p>
-        ))}
-      </div>
-    );
-  };
-
-  const CustomCursor = ({ x, y, height }) => {
-    if (x == null || y == null || height == null || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(height)) {
-      return null;
-    }
-    return (
-      <line
-        x1={x} y1={y} x2={x} y2={y + height}
-        stroke="#3B82F6"
-        strokeOpacity={0.18}
-        strokeWidth={1}
-        strokeDasharray="3 2"
-      />
-    );
-  };
 
   const renderAreas = () => {
     if (comparison && tickers) {
@@ -175,7 +174,7 @@ export const StockChart = ({ history, period, onPeriodChange, comparison, ticker
                 tickFormatter={(v) => Number.isFinite(v) ? (comparison ? `${v.toFixed(1)}%` : `${getCurrencySymbol(currency, ticker)}${v.toFixed(0)}`) : ""}
                 width={46}
               />
-              <Tooltip content={<CustomTooltip />} cursor={<CustomCursor />} />
+              <Tooltip content={<CustomTooltip comparison={comparison} currency={currency} ticker={ticker} />} cursor={<CustomCursor />} />
               {comparison && tickers && (
                 <Legend
                   wrapperStyle={{ fontSize: "10px", color: "#9CA3AF", paddingTop: "4px" }}

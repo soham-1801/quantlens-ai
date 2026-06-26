@@ -1,4 +1,3 @@
-import React from "react";
 
 const getAvatarColor = (char) => {
   const colors = [
@@ -14,7 +13,7 @@ const getAvatarColor = (char) => {
   return colors[code % colors.length];
 };
 
-export const StockLogo = ({ ticker, website, className = "w-8 h-8" }) => {
+export const StockLogo = ({ ticker, className = "w-8 h-8" }) => {
   const firstLetter = ticker ? ticker.charAt(0).toUpperCase() : "?";
   const gradientClass = getAvatarColor(firstLetter);
 

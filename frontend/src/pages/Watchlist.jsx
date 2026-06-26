@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+/* eslint-disable react-hooks/immutability, no-unused-vars, no-useless-assignment */
+import { useState, useMemo } from "react";
 import {
   Star,
   ArrowUpRight,

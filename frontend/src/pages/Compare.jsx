@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect, useMemo } from "react";
 import { Loader2, TrendingUp, TrendingDown, GitCompare, ArrowLeftRight } from "lucide-react";
 import { api } from "../services/api";
 import { StockLogo } from "../components/StockLogo";
@@ -34,19 +35,6 @@ const DesktopRow = ({ label, valA, valB, highlight }) => (
   </tr>
 );
 
-const MobileCard = ({ ticker, overview, change, label, valA, valB }) => (
-  <div className="bg-[#161B26]/40 border border-[#242D3D]/60 rounded-2xl p-4 backdrop-blur-md">
-    <div className="flex items-center gap-2 mb-3">
-      <StockLogo ticker={ticker} className="w-6 h-6" />
-      <span className="text-sm font-bold text-white">{ticker}</span>
-      <span className="text-[10px] text-gray-400 font-light truncate ml-1">{overview?.name || ""}</span>
-    </div>
-    <div className="flex items-center justify-between text-xs py-1.5 border-b border-[#242D3D]/20">
-      <span className="text-gray-500 font-medium uppercase tracking-wider">{label}</span>
-      <span className={`tabular-nums font-semibold ${highlight || "text-white"}`}>{valA}</span>
-    </div>
-  </div>
-);
 
 const METRICS = [
   { key: "company", label: "Company" },

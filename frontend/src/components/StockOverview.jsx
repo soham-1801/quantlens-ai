@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Globe } from "lucide-react";
 import { MetricTooltip } from "./MetricTooltip";
 import { StockLogo } from "./StockLogo";
@@ -15,9 +15,9 @@ const truncateWords = (text, maxWords = WORD_LIMIT) => {
 };
 
 export const StockOverview = ({ overview }) => {
-  if (!overview) return null;
-
   const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!overview) return null;
 
   const formatCompactNumber = (val) => {
     if (val == null || !Number.isFinite(val)) return "N/A";

@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable react-hooks/immutability */
+import { useState, useEffect } from "react";
+import { Toaster } from "react-hot-toast";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { WatchlistProvider } from "./context/WatchlistContext";
+import { PortfolioProvider } from "./context/PortfolioContext";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
@@ -9,6 +12,7 @@ import { StockDetail } from "./pages/StockDetail";
 import { Watchlist } from "./pages/Watchlist";
 import { Compare } from "./pages/Compare";
 import { Screener } from "./pages/Screener";
+import { Portfolio } from "./pages/Portfolio";
 import { Loader2 } from "lucide-react";
 
 const AppContent = () => {
@@ -72,6 +76,9 @@ const AppContent = () => {
     if (currentHash === "#/watchlist") {
       return <Watchlist />;
     }
+    if (currentHash === "#/portfolio") {
+      return <Portfolio />;
+    }
     return <Dashboard />;
   };
 
@@ -79,6 +86,7 @@ const AppContent = () => {
   const resolveActiveSidebar = () => {
     if (currentHash === "#/screener") return "screener";
     if (currentHash === "#/compare") return "compare";
+    if (currentHash === "#/portfolio") return "portfolio";
     if (currentHash.startsWith("#/stock/")) return "dashboard";
     const page = currentHash.replace("#/", "");
     return page || "dashboard";
@@ -95,7 +103,27 @@ function App() {
   return (
     <AuthProvider>
       <WatchlistProvider>
-        <AppContent />
+        <PortfolioProvider>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: "#161B26",
+                color: "#fff",
+                border: "1px solid rgba(36, 45, 61, 0.6)",
+                fontSize: "12px",
+                fontWeight: "600",
+              },
+              success: {
+                iconTheme: {
+                  primary: "#10B981",
+                  secondary: "#fff",
+                },
+              },
+            }}
+          />
+          <AppContent />
+        </PortfolioProvider>
       </WatchlistProvider>
     </AuthProvider>
   );

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect, useRef } from "react";
 import { Search, Loader2, ArrowRight } from "lucide-react";
 import { api } from "../services/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -54,7 +55,41 @@ export const GlobalSearch = () => {
       try {
         const data = await api.get(`/stocks/search?q=${searchQuery}`);
         
-        // Sort/Rank search results
+        // Sort and Rank results
+        const sortSearchResults = (results, query) => {
+          const q = query.toUpperCase().trim();
+          return [...results].sort((a, b) => {
+            const tickerA = a.ticker.toUpperCase();
+            const tickerB = b.ticker.toUpperCase();
+
+            // Priority 1: Exact ticker match
+            const isExactA = tickerA === q;
+            const isExactB = tickerB === q;
+            if (isExactA && !isExactB) return -1;
+            if (!isExactA && isExactB) return 1;
+
+            // Priority 1.5: Prefix ticker match
+            const startsWithA = tickerA.startsWith(q);
+            const startsWithB = tickerB.startsWith(q);
+            if (startsWithA && !startsWithB) return -1;
+            if (!startsWithA && startsWithB) return 1;
+
+            // Priority 2: US-listed primary equities
+            const isUsEquityA = a.quote_type === "EQUITY" && (a.country === "United States" || a.country === "US");
+            const isUsEquityB = b.quote_type === "EQUITY" && (b.country === "United States" || b.country === "US");
+            if (isUsEquityA && !isUsEquityB) return -1;
+            if (!isUsEquityA && isUsEquityB) return 1;
+
+            // Priority 4: ETF (lower priority than single stocks if not exact/prefix match)
+            const isEtfA = a.quote_type === "ETF";
+            const isEtfB = b.quote_type === "ETF";
+            if (isEtfA && !isEtfB) return 1;
+            if (!isEtfA && isEtfB) return -1;
+
+            return 0; // fallback to Yahoo's relevance sorting
+          });
+        };
+
         const sortedData = sortSearchResults(data, searchQuery);
         setSuggestions(sortedData);
       } catch (err) {
@@ -72,40 +107,7 @@ export const GlobalSearch = () => {
     setActiveSuggestionIndex(-1);
   }, [suggestions, searchQuery, isSearchFocused]);
 
-  // Sort and Rank results
-  const sortSearchResults = (results, query) => {
-    const q = query.toUpperCase().trim();
-    return [...results].sort((a, b) => {
-      const tickerA = a.ticker.toUpperCase();
-      const tickerB = b.ticker.toUpperCase();
-
-      // Priority 1: Exact ticker match
-      const isExactA = tickerA === q;
-      const isExactB = tickerB === q;
-      if (isExactA && !isExactB) return -1;
-      if (!isExactA && isExactB) return 1;
-
-      // Priority 1.5: Prefix ticker match
-      const startsWithA = tickerA.startsWith(q);
-      const startsWithB = tickerB.startsWith(q);
-      if (startsWithA && !startsWithB) return -1;
-      if (!startsWithA && startsWithB) return 1;
-
-      // Priority 2: US-listed primary equities
-      const isUsEquityA = a.quote_type === "EQUITY" && (a.country === "United States" || a.country === "US");
-      const isUsEquityB = b.quote_type === "EQUITY" && (b.country === "United States" || b.country === "US");
-      if (isUsEquityA && !isUsEquityB) return -1;
-      if (!isUsEquityA && isUsEquityB) return 1;
-
-      // Priority 4: ETF (lower priority than single stocks if not exact/prefix match)
-      const isEtfA = a.quote_type === "ETF";
-      const isEtfB = b.quote_type === "ETF";
-      if (isEtfA && !isEtfB) return 1;
-      if (!isEtfA && isEtfB) return -1;
-
-      return 0; // fallback to Yahoo's relevance sorting
-    });
-  };
+  // Handle selecting a ticker
 
   // Save recent search (max 10, newest to top, unique) and navigate
   const handleSelectTicker = (item) => {

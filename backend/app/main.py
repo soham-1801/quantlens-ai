@@ -13,6 +13,7 @@ from app.api.router import api_router
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.models.sentiment_cache import SentimentCache
+from app.models.portfolio import PortfolioItem
 
 
 # Auto-create tables if they don't exist (primarily for SQLite development)

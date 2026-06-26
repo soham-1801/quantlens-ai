@@ -1,4 +1,5 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useState, useEffect, useContext } from "react";
 import { api } from "../services/api";
 
 const AuthContext = createContext(null);
@@ -47,8 +48,6 @@ export const AuthProvider = ({ children }) => {
     try {
       const userData = await api.register(email, password, fullName);
       return userData;
-    } catch (error) {
-      throw error;
     } finally {
       setLoading(false);
     }

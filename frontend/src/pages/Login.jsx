@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { LineChart, AlertCircle, CheckCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { LineChart, Loader2, Eye, EyeOff } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 export const Login = ({ onNavigate }) => {
   const { login } = useAuth();
@@ -13,23 +15,15 @@ export const Login = ({ onNavigate }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   
-  // Validations & Floating Toast
+  // Validations
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [toast, setToast] = useState({ show: false, message: "", type: "error" });
 
   // Explicitly clear fields on mount to override browser form caching/restoration
   useEffect(() => {
     setEmail("");
     setPassword("");
   }, []);
-
-  const showToast = (message, type = "error") => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast({ show: false, message: "", type });
-    }, 4000);
-  };
 
   const validateForm = () => {
     let isValid = true;
@@ -61,20 +55,20 @@ export const Login = ({ onNavigate }) => {
     e.preventDefault();
 
     if (!validateForm()) {
-      showToast("Please fix the validation errors below.");
+      toast.error("Please fix the validation errors below.");
       return;
     }
 
     setLoading(true);
     try {
       await login(email, password);
-      showToast("Access authorized! Loading workspace...", "success");
+      toast.success("Access authorized! Loading workspace...");
       setTimeout(() => {
         onNavigate("dashboard");
       }, 800);
     } catch (err) {
       console.error(err);
-      showToast(err.message || "Incorrect email or password.");
+      toast.error(err.message || "Incorrect email or password.");
     } finally {
       setLoading(false);
     }
@@ -89,18 +83,6 @@ export const Login = ({ onNavigate }) => {
       />
       {/* Immersive overlay for premium dark theme and depth-of-field blur */}
       <div className="absolute inset-0 bg-[#080B11]/88 backdrop-blur-[1.5px]" />
-
-      {/* Floating Toast Notification */}
-      {toast.show && (
-        <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl border shadow-2xl transition-all duration-300 max-w-sm ${
-          toast.type === "success" 
-            ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/25 backdrop-blur-md" 
-            : "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/25 backdrop-blur-md"
-        }`}>
-          {toast.type === "success" ? <CheckCircle className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
-          <span className="text-xs font-semibold leading-tight">{toast.message}</span>
-        </div>
-      )}
 
       {/* Decorative Glow Blobs for financial highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>

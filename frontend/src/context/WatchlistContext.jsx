@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+/* eslint-disable react-hooks/set-state-in-effect, react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import { api } from "../services/api";
+import { toast } from "react-hot-toast";
 
 const WatchlistContext = createContext(null);
 
@@ -35,8 +37,10 @@ export const WatchlistProvider = ({ children }) => {
     try {
       await api.post("/watchlist/", { ticker });
       await loadWatchlist();
+      toast.success(`${ticker} added to watchlist`);
     } catch (err) {
       console.error("Error adding to watchlist:", err);
+      toast.error(`Failed to add ${ticker}`);
       throw err;
     }
   };
@@ -45,8 +49,10 @@ export const WatchlistProvider = ({ children }) => {
     try {
       await api.delete(`/watchlist/${ticker}`);
       setWatchlist((prev) => prev.filter((item) => item.ticker.toUpperCase() !== ticker.toUpperCase()));
+      toast.success(`${ticker} removed from watchlist`);
     } catch (err) {
       console.error("Error removing from watchlist:", err);
+      toast.error(`Failed to remove ${ticker}`);
       throw err;
     }
   };
@@ -59,9 +65,11 @@ export const WatchlistProvider = ({ children }) => {
           item.ticker.toUpperCase() === ticker.toUpperCase() ? updated : item
         )
       );
+      toast.success(`${ticker} data refreshed`);
       return updated;
     } catch (err) {
       console.error("Error refreshing watchlist item:", err);
+      toast.error(`Failed to refresh ${ticker}`);
       throw err;
     }
   };

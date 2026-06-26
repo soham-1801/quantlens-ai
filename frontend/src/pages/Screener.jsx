@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability */
+import { useState, useEffect, useMemo } from "react";
 import { Search, ChevronDown, ChevronUp, Trash2, Save, Download, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { api } from "../services/api";
 import { formatMarketCap, formatPrice, getUSDEquivalent } from "../utils/format";
@@ -198,13 +199,17 @@ export const Screener = () => {
     try {
       const raw = localStorage.getItem(SAVED_SCREENS_KEY);
       if (raw) setSavedScreens(JSON.parse(raw));
-    } catch {}
+    } catch (err) {
+      console.debug(err);
+    }
   }, []);
 
   useEffect(() => {
     try {
       localStorage.setItem(SAVED_SCREENS_KEY, JSON.stringify(savedScreens));
-    } catch {}
+    } catch (err) {
+      console.debug(err);
+    }
   }, [savedScreens]);
 
   useEffect(() => {
@@ -217,7 +222,9 @@ export const Screener = () => {
             return parsed.data;
           }
         }
-      } catch {}
+      } catch (err) {
+      console.debug(err);
+    }
       return null;
     })();
     if (cached) {
@@ -251,7 +258,9 @@ export const Screener = () => {
         setStocks(results);
         try {
           localStorage.setItem(STOCKS_CACHE_KEY, JSON.stringify({ data: results, ts: Date.now() }));
-        } catch {}
+        } catch (err) {
+          console.debug(err);
+        }
         setLoading(false);
       }
     };

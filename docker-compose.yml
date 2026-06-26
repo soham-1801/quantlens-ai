@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/quantlens.db
+      - SECRET_KEY=quantlens_super_secret_key_change_in_production
+      - VADER_LEXICON_PATH=./vader_lexicon.txt
+    volumes:
+      # Mount the database directory to persist data safely
+      - quantlens_db_data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # In a local docker-compose setup, the browser hits localhost, so we route API to localhost
+        - VITE_API_URL=http://localhost:8000/api/v1
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  quantlens_db_data:

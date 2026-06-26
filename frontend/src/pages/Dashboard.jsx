@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability */
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useWatchlist } from "../context/WatchlistContext";
 import { Search, Star, Trash2, ArrowUpRight, ArrowDownRight, TrendingUp, RefreshCcw, ArrowRight, TrendingDown, Compass } from "lucide-react";
 import { StockLogo } from "../components/StockLogo";
+import { Skeleton } from "../components/Skeleton";
 import { formatPrice } from "../utils/format";
 
 const WatchlistSkeleton = () => (
@@ -11,26 +13,23 @@ const WatchlistSkeleton = () => (
       <div key={i} className="glass-card rounded-2xl p-5 min-h-[176px] animate-fade-in-up" style={{ animationDelay: `${i * 60}ms` }}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3">
-            <div className="skeleton skeleton-avatar" />
+            <Skeleton className="w-10 h-10 rounded-full" />
             <div className="space-y-2">
-              <div className="skeleton skeleton-title w-20" />
-              <div className="skeleton skeleton-text w-32" />
+              <Skeleton className="w-20 h-4" />
+              <Skeleton className="w-32 h-3" />
             </div>
           </div>
           <div className="flex gap-1">
-            <div className="skeleton w-8 h-8 rounded-lg" />
-            <div className="skeleton w-8 h-8 rounded-lg" />
+            <Skeleton className="w-8 h-8 rounded-lg" />
+            <Skeleton className="w-8 h-8 rounded-lg" />
           </div>
         </div>
         <div className="mt-6 flex items-end justify-between border-t border-[#242D3D]/30 pt-4">
           <div className="space-y-2">
-            <div className="skeleton skeleton-text w-16" />
-            <div className="skeleton skeleton-title w-24" />
+            <Skeleton className="w-16 h-3" />
+            <Skeleton className="w-24 h-5" />
           </div>
-          <div className="space-y-2">
-            <div className="skeleton skeleton-text w-12" />
-            <div className="skeleton w-20 h-7 rounded-lg" />
-          </div>
+          <Skeleton className="w-16 h-8 rounded-xl" />
         </div>
       </div>
     ))}

@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { LineChart, AlertCircle, CheckCircle, Loader2, Eye, EyeOff, Check, X } from "lucide-react";
+import { LineChart, Loader2, Eye, EyeOff, Check, X } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 export const Register = ({ onNavigate }) => {
   const { register } = useAuth();
@@ -16,9 +18,8 @@ export const Register = ({ onNavigate }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Status indicators & Toast notifications
+  // Status indicators
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState({ show: false, message: "", type: "error" });
   
   // Validation error alerts
   const [errors, setErrors] = useState({});
@@ -40,13 +41,6 @@ export const Register = ({ onNavigate }) => {
     setPassword("");
     setConfirmPassword("");
   }, []);
-
-  const showToast = (message, type = "error") => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast({ show: false, message: "", type });
-    }, 4000);
-  };
 
   // Monitor password value changes to update requirements/strength
   useEffect(() => {
@@ -100,7 +94,7 @@ export const Register = ({ onNavigate }) => {
     e.preventDefault();
 
     if (!validateForm()) {
-      showToast("Please correct the form fields.");
+      toast.error("Please correct the form fields.");
       return;
     }
 
@@ -109,7 +103,7 @@ export const Register = ({ onNavigate }) => {
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
       await register(email, password, fullName);
       
-      showToast("Workspace created successfully! Redirecting to login...", "success");
+      toast.success("Workspace created successfully! Redirecting to login...");
       
       setFirstName("");
       setLastName("");
@@ -122,7 +116,7 @@ export const Register = ({ onNavigate }) => {
       }, 1500);
     } catch (err) {
       console.error(err);
-      showToast(err.message || "Registration failed. Please try again.");
+      toast.error(err.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -146,18 +140,6 @@ export const Register = ({ onNavigate }) => {
       />
       {/* Immersive overlay for premium dark theme and depth-of-field blur */}
       <div className="absolute inset-0 bg-[#080B11]/88 backdrop-blur-[1.5px]" />
-
-      {/* Floating Toast Notification */}
-      {toast.show && (
-        <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl border shadow-2xl transition-all duration-300 max-w-sm ${
-          toast.type === "success" 
-            ? "bg-[#10B981]/15 text-[#10B981] border-[#10B981]/25 backdrop-blur-md" 
-            : "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/25 backdrop-blur-md"
-        }`}>
-          {toast.type === "success" ? <CheckCircle className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
-          <span className="text-xs font-semibold leading-tight">{toast.message}</span>
-        </div>
-      )}
 
       {/* Decorative Glow Blobs for financial highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>

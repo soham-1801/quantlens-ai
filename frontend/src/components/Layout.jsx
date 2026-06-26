@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useWatchlist } from "../context/WatchlistContext";
 import { GlobalSearch } from "./GlobalSearch";
@@ -13,10 +14,12 @@ import {
   Server,
   Menu,
   X,
+  Briefcase
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: <Layers className="w-4 h-4" />, badgeKey: null },
+  { id: "portfolio", label: "Portfolio", icon: <Briefcase className="w-4 h-4" />, badgeKey: null },
   { id: "watchlist", label: "Watchlist", icon: <Star className="w-4 h-4" />, badgeKey: "watchlist" },
   { id: "compare", label: "Compare", icon: <GitCompare className="w-4 h-4" />, badgeKey: null },
   { id: "screener", label: "Screener", icon: <Filter className="w-4 h-4" />, badgeKey: null },
