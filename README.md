@@ -33,7 +33,7 @@
 
 ### Dashboard
 
-![Dashboard](screenshots/Dashboard.png)
+![Dashboard](screenshots/dashboard.png)
 
 ### Stock Analysis
 
@@ -41,7 +41,7 @@
 
 ### Portfolio
 
-![Portfolio](screenshots/Portfolio.png)
+![Portfolio](screenshots/portfolio.png)
 
 ### Watchlist
 
@@ -117,7 +117,7 @@ The system aggregates data from Yahoo Finance (via `yfinance` and direct HTTP), 
 
 ## Architecture
 
-![System Architecture](screenshots/Architecture.png)
+![System Architecture](screenshots/architecture.png)
 
 QuantLens AI uses a React frontend and FastAPI backend with multi-provider market data aggregation, intelligent fallback mechanisms, sentiment analysis, caching, and watchlist management.
 
