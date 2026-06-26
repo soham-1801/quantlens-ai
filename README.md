@@ -37,7 +37,7 @@
 
 ### Stock Analysis
 
-![Stock Analysis](screenshots/Stock-analysis.png)
+![Stock Analysis](screenshots/stock-analysis.png)
 
 ### Portfolio
 
@@ -57,7 +57,7 @@
 
 ### Stock Screener
 
-![Screener](screenshots/Screener.jpeg)
+![Screener](screenshots/screener.jpeg)
 
 ---
 
