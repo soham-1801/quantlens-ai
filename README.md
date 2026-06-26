@@ -53,7 +53,7 @@
 
 ### AI Sentiment Analysis
 
-![Sentiment Analysis](screenshots/Sentiment-news.jpeg)
+![Sentiment Analysis](screenshots/Sentiment-news.png)
 
 ### Stock Screener
 
